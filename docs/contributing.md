@@ -1,0 +1,93 @@
+# Contributing
+
+Thanks for your interest in contributing to Piazza SDK!
+
+## Development Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/ayushmorbar/piazza-sdk.git
+cd piazza-sdk
+
+# Install in editable mode with dev dependencies
+pip install -e ".[dev]"
+```
+
+## Code Quality
+
+All contributions must pass:
+
+```bash
+ruff check src/ tests/         # Linting
+ruff format --check src/ tests/ # Formatting
+mypy src/                       # Type checking
+pytest                          # Tests
+```
+
+### Style Guidelines
+
+- **Line length**: 100 characters max
+- **Quotes**: Double quotes
+- **Imports**: Sorted via `isort` (through ruff)
+- **Type hints**: Required on all function signatures
+- **Trailing commas**: Required on `__all__` and multi-line structures
+
+## Testing
+
+- Tests live in `tests/`
+- Use `pytest` with `asyncio_mode = "auto"` (no `@pytest.asyncio` needed)
+- Mock external network calls — no live API requests in tests
+- Aim for fast, isolated, deterministic tests
+
+```bash
+# Run tests
+pytest
+
+# Run with coverage
+pytest --cov=piazza_sdk --cov-report=term-missing
+```
+
+## Project Structure
+
+```
+src/piazza_sdk/
+  __init__.py        # Public API exports
+  auth.py            # SessionConfig, SessionState, cookie management
+  exceptions.py      # Exception hierarchy
+  utils.py           # HTML parsing, text normalization
+  models/
+    __init__.py      # All model exports
+    enums.py         # PostType, Role, Status, SortOrder, Folder
+    feed.py          # Feed, FeedItem, filter classes
+    post.py          # Post and sub-models (Answer, FollowUp, etc.)
+    network.py       # NetworkInfo, Statistics
+    user.py          # User
+  api/
+    __init__.py      # API exports
+    piazza.py        # Piazza client (get_user_classes, network)
+    network.py       # Network operations (feed, posts, search)
+    rpc.py           # RPC transport (request logging, error mapping)
+tests/
+  conftest.py        # Shared fixtures
+  test_*.py          # Test modules
+```
+
+## Submitting Changes
+
+1. Fork the repository
+2. Create a feature branch from `main`
+3. Make your changes
+4. Ensure all checks pass
+5. Submit a pull request with a clear description
+
+## Reporting Issues
+
+Open an issue on GitHub with:
+
+- A clear title and description
+- Steps to reproduce (if applicable)
+- Expected vs actual behavior
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the Apache License 2.0.

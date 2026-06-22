@@ -1,0 +1,56 @@
+site_name: Piazza SDK
+site_description: Modern async Python SDK for Piazza's internal API
+site_url: https://ayushmorbar.github.io/piazza-sdk/
+
+repo_url: https://github.com/ayushmorbar/piazza-sdk
+repo_name: ayushmorbar/piazza-sdk
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - navigation.instant
+    - navigation.tracking
+    - search.suggest
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - API Reference: api.md
+  - Configuration: configuration.md
+  - Contributing: contributing.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
+            heading_level: 3
+            members_order: source
+            docstring_style: google
+            merge_init_into_class: true

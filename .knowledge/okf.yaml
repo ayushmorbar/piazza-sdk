@@ -1,0 +1,16 @@
+version: "0.1"
+name: piazza-sdk
+description: >
+  Modern async Python SDK for Piazza's internal API.
+  Apache-2.0 licensed. Python ≥3.11, src layout, hatchling build.
+  Runtime deps: httpx, pydantic v2, cryptography, tenacity.
+files:
+  - path: overview.md
+    title: Project Overview
+    description: Architecture, public API surface, and key models
+  - path: conventions.md
+    title: Coding Conventions
+    description: Python style, Pydantic v2 patterns, async patterns, exception handling
+  - path: testing.md
+    title: Testing Patterns
+    description: Test structure, fixtures, async test patterns, mock patterns

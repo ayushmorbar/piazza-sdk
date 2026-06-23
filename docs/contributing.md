@@ -29,8 +29,9 @@ pytest                          # Tests
 - **Line length**: 100 characters max
 - **Quotes**: Double quotes
 - **Imports**: Sorted via `isort` (through ruff)
-- **Type hints**: Required on all function signatures
+- **Type hints**: Required on all function signatures (`mypy --strict` compatible)
 - **Trailing commas**: Required on `__all__` and multi-line structures
+- **Union syntax**: `X | None`, not `Optional[X]`
 
 ## Testing
 
@@ -51,25 +52,43 @@ pytest --cov=piazza_sdk --cov-report=term-missing
 
 ```
 src/piazza_sdk/
-  __init__.py        # Public API exports
-  auth.py            # SessionConfig, SessionState, cookie management
-  exceptions.py      # Exception hierarchy
-  utils.py           # HTML parsing, text normalization
+  __init__.py          # Public API re-exports
+  _version.py          # Version string (CalVer)
+  auth.py              # Re-exports from adapters (backward compat)
+  exceptions.py        # Exception hierarchy rooted at PiazzaSDKError
+  adapters/            # Concrete implementations (hexagonal architecture)
+    auth.py            # CookieJar, FernetTokenStorage, SessionConfig, SessionState
+    http.py            # RPC adapter — httpx-backed HTTP client
+    session.py         # SessionStateManager (async context manager)
+  ports/               # Protocol definitions (hexagonal architecture)
+    auth.py            # AuthProtocol, SessionConfigProtocol, TokenStorageProtocol
+    http.py            # HTTPClientProtocol, RPCProtocol
+    session.py         # SessionManagerProtocol
+  api/                 # High-level API layer
+    piazza.py          # Piazza client (get_user_classes, network)
+    network.py         # Network operations (feed, posts, search, users)
+    rpc.py             # Low-level HTTP transport (retries, error mapping)
+  domain/              # Standalone business logic
+    feed.py            # get_feed, get_similar_posts
+    posts.py           # create_post, answer_post, endorse, add_tag
+    search.py          # search
+    users.py           # get_all_users, get_instructor_stats
+    statistics.py      # get_statistics
+    preferences.py     # get_preferences, update_preferences
   models/
-    __init__.py      # All model exports
-    enums.py         # PostType, Role, Status, SortOrder, Folder
-    feed.py          # Feed, FeedItem, filter classes
-    post.py          # Post and sub-models (Answer, FollowUp, etc.)
-    network.py       # NetworkInfo, Statistics
-    user.py          # User
-  api/
-    __init__.py      # API exports
-    piazza.py        # Piazza client (get_user_classes, network)
-    network.py       # Network operations (feed, posts, search)
-    rpc.py           # RPC transport (request logging, error mapping)
+    __init__.py        # All model exports
+    enums.py           # PostType, UserRole, FeedItemType, etc.
+    feed.py            # Feed, FeedItem, filter classes
+    post.py            # Post and sub-models (Answer, FollowUp, etc.)
+    network.py         # NetworkInfo, Statistics
+    user.py            # User, UserPreferences
+  utils/
+    normalization.py   # HTML/text normalization
+    image.py           # Image processing
+    classification.py  # Content classification
 tests/
-  conftest.py        # Shared fixtures
-  test_*.py          # Test modules
+  conftest.py          # Shared fixtures
+  test_*.py            # Test modules
 ```
 
 ## Submitting Changes

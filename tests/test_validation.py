@@ -72,4 +72,4 @@ class TestNetworkInputValidation:
             network._rpc, "content_create", new_callable=AsyncMock, return_value={"id": "cl_new"}
         ):
             result = await network.create_post(title="Valid Title", content="Valid content")
-            assert result == {"id": "cl_new"}
+            assert result.id == "cl_new"

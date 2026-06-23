@@ -22,15 +22,19 @@ class User(BaseModel):
         class_roles: Mapping of network ID to role string for this user.
     """
 
-    id: str
-    name: str = ""
-    email: str = ""
-    role: UserRole = UserRole.STUDENT
-    is_instructor: bool = False
-    is_student: bool = True
-    is_ta: bool = False
-    is_admin: bool = False
-    class_roles: dict[str, str] = Field(default_factory=dict)
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    id: str = Field(description="Unique user identifier")
+    name: str = Field(default="", description="User's display name")
+    email: str = Field(default="", description="User's email address")
+    role: UserRole = Field(default=UserRole.STUDENT, description="User's primary role")
+    is_instructor: bool = Field(default=False, description="Whether user is an instructor")
+    is_student: bool = Field(default=True, description="Whether user is a student")
+    is_ta: bool = Field(default=False, description="Whether user is a teaching assistant")
+    is_admin: bool = Field(default=False, description="Whether user is an admin")
+    class_roles: dict[str, str] = Field(
+        default_factory=dict, description="Mapping of network ID to role string"
+    )
 
     def get_classes_by_role(self, role: str) -> list[str]:
         """Return network IDs where the user has the specified role.
@@ -70,15 +74,18 @@ class UserPreferences(BaseModel):
         show_student_names: Whether to show student names publicly.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(slots=True, populate_by_name=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
-    digest_frequency: str = "daily"
-    digest_hour: int = 9
-    email_new_post: bool = True
-    email_new_followup: bool = True
-    email_new_answer: bool = True
-    email_new_comment: bool = False
-    push_new_post: bool = True
-    push_new_followup: bool = True
-    push_new_answer: bool = True
-    show_student_names: bool = True
+    digest_frequency: str = Field(
+        default="daily",
+        description="Email digest frequency (real_time, daily, weekly, never)",
+    )
+    digest_hour: int = Field(default=9, description="Hour of day (0-23) to send digest emails")
+    email_new_post: bool = Field(default=True, description="Email on new posts")
+    email_new_followup: bool = Field(default=True, description="Email on new follow-ups")
+    email_new_answer: bool = Field(default=True, description="Email on new answers")
+    email_new_comment: bool = Field(default=False, description="Email on new comments")
+    push_new_post: bool = Field(default=True, description="Push-notify on new posts")
+    push_new_followup: bool = Field(default=True, description="Push-notify on new follow-ups")
+    push_new_answer: bool = Field(default=True, description="Push-notify on new answers")
+    show_student_names: bool = Field(default=True, description="Show student names publicly")

@@ -24,13 +24,28 @@ pytest tests/ --cov=src/piazza_sdk --cov-report=term-missing
 ```
 src/piazza_sdk/
   __init__.py          # Public API re-exports
-  _version.py          # Version string
-  auth.py              # SessionConfig, CookieJar, SessionStateManager
+  _version.py          # Version string (CalVer)
+  auth.py              # SessionConfig, CookieJar, SessionStateManager (canonical)
   exceptions.py        # Exception hierarchy rooted at PiazzaSDKError
   api/
     rpc.py             # Low-level HTTP client (tenacity retries, error mapping)
     piazza.py          # High-level Piazza client (get_user_classes, etc.)
     network.py         # Network-level operations (feed, posts, search)
+  adapters/            # Concrete implementations (hexagonal architecture)
+    auth.py            # CookieJar, FernetTokenStorage, SessionConfig, SessionState
+    http.py            # RPC adapter — httpx-backed HTTP client
+    session.py         # SessionStateManager adapter
+  ports/               # Protocol definitions (hexagonal architecture)
+    auth.py            # AuthProtocol, SessionConfigProtocol, TokenStorageProtocol
+    http.py            # HTTPClientProtocol, RPCProtocol
+    session.py         # SessionManagerProtocol
+  domain/              # Standalone business logic (extracted from Network)
+    feed.py            # get_feed, get_similar_posts
+    posts.py           # create_post, answer_post, endorse, add_tag, etc.
+    preferences.py     # get_preferences, update_preferences
+    search.py          # search
+    statistics.py      # get_statistics
+    users.py           # get_all_users, get_instructor_stats, get_online_users
   models/
     enums.py           # StrEnum types (UserRole, PostType, FeedItemType, etc.)
     feed.py            # FeedItem, FeedFilter, Feed, filter models
@@ -48,8 +63,15 @@ tests/
   test_auth_unit.py    # Auth unit tests
   test_exceptions.py   # Exception hierarchy tests
   test_smoke.py        # Smoke tests
+  test_network.py      # Network class tests (feed, posts, users, errors)
+  test_domain.py       # Domain module tests
+  test_adapters_http.py # RPC adapter tests
   test_utils.py        # Utility tests
+  test_utils_classification.py  # ActivityClassifier tests
+  test_utils_image.py  # Image utility tests
   test_validation.py   # Validation edge case tests
+  test_advanced_features.py  # Advanced feature tests
+  test_feature_parity.py     # Feature parity tests
 ```
 
 ## Architecture
@@ -58,6 +80,7 @@ tests/
 - **RPC** — low-level HTTP via httpx. Retries on 429/5xx with exponential backoff. Maps HTTP errors to typed exceptions.
 - **Models** — Pydantic v2 `BaseModel` with `model_config = ConfigDict(strict=True, extra="forbid")`. All fields typed.
 - **Exceptions** — `PiazzaSDKError` base. Subclasses: `AuthenticationError`, `RateLimitError`, `NotFoundError`, `PermissionError`, `ValidationError`, `NetworkError`, `ContentError`, `FeedError`, `UserError`, `SearchError`, `StatisticsError`.
+- **Hexagonal architecture** — `ports/` defines Protocol interfaces; `adapters/` provides concrete httpx/Fernet/cookie implementations; `domain/` holds standalone async business logic functions extracted from Network.
 
 ## Coding Rules
 

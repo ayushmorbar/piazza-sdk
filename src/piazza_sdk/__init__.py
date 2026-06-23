@@ -58,9 +58,11 @@ from piazza_sdk.models.feed import (
 )
 from piazza_sdk.models.network import HallOfFameItem, NetworkInfo, Statistics
 from piazza_sdk.models.post import (
+    AssetUploadResponse,
     ChangeLogEntry,
     Endorsement,
     Post,
+    PostCreatedResponse,
     PostRevision,
     PublishingOptions,
 )
@@ -107,6 +109,7 @@ __all__ = [
     "UserRole",
     "Visibility",
     # Models
+    "AssetUploadResponse",
     "ChangeLogEntry",
     "Endorsement",
     "Feed",
@@ -117,6 +120,7 @@ __all__ = [
     "HallOfFameItem",
     "NetworkInfo",
     "Post",
+    "PostCreatedResponse",
     "PostRevision",
     "PublishingOptions",
     "SearchBuilder",

@@ -9,9 +9,16 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError as PydanticValidationError
 
 from piazza_sdk.api.network import Network
-from piazza_sdk.exceptions import ContentError, NotFoundError, UploadError, ValidationError
+from piazza_sdk.exceptions import (
+    ContentError,
+    FeedError,
+    NotFoundError,
+    UploadError,
+    ValidationError,
+)
 from piazza_sdk.models.enums import FeedItemDefaultAnonymity, FeedItemType
 from piazza_sdk.models.feed import Feed, FeedItem, SearchBuilder, SearchFilter
 from piazza_sdk.models.network import HallOfFameItem
@@ -451,7 +458,7 @@ class TestNetworkListenForEvents:
     @pytest.mark.asyncio
     async def test_calls_get_feed(self) -> None:
         net = _make_network()
-        item = FeedItem(id="item_1", type=FeedItemType.NOTE, title="t", body="b")
+        item = FeedItem(id="item_1", type=FeedItemType.NOTE, subject="t")
         feed = MagicMock(spec=Feed)
         feed.feed = [item]
         net.get_feed = AsyncMock(return_value=feed)
@@ -608,7 +615,7 @@ class TestPublishingOptions:
     @pytest.mark.asyncio
     async def test_wired_into_create_followup(self) -> None:
         net = _make_network()
-        net._rpc.content_create = AsyncMock(return_value={})
+        net._rpc.content_create = AsyncMock(return_value={"result": {"id": "followup_1"}})
         opts = PublishingOptions(anonymity="all")
         await net.create_followup("post_1", "reply", options=opts)
         _, kwargs = net._rpc.content_create.call_args
@@ -637,11 +644,11 @@ class TestHallOfFameItem:
         assert item.votes == 5
         assert item.uid == "u1"
 
-    def test_extra_fields_ignored(self) -> None:
-        item = HallOfFameItem(
-            uid="u1", nr=1, time=2, text="t", when=3, unknown_field="ignored"
-        )
-        assert item.uid == "u1"
+    def test_extra_fields_rejected(self) -> None:
+        with pytest.raises(PydanticValidationError, match="Extra inputs are not permitted"):
+            HallOfFameItem(
+                uid="u1", nr=1, time=2, text="t", when=3, unknown_field="ignored"
+            )
 
     def test_all_optional(self) -> None:
         item = HallOfFameItem()
@@ -818,7 +825,7 @@ class TestGetSimilarPosts:
     async def test_rpc_error_raises_content_error(self) -> None:
         net = _make_network()
         net._rpc.content_get_similar = AsyncMock(side_effect=RuntimeError("fail"))
-        with pytest.raises(ContentError, match="Failed to get similar posts"):
+        with pytest.raises(FeedError, match="Failed to get similar posts"):
             await net.get_similar_posts("post_1")
 
     @pytest.mark.asyncio
@@ -892,13 +899,13 @@ class TestUploadAsset:
     async def test_returns_asset_data(self) -> None:
         net = _make_network()
         net._rpc.asset_get_upload_url = AsyncMock(
-            return_value={"url": "https://upload.example.com/file1", "id": "asset_1"}
+            return_value={"url": "https://s3.amazonaws.com/bucket/file1", "id": "asset_1"}
         )
         put_response = MagicMock()
         put_response.raise_for_status = MagicMock()
         net._rpc._client.put = AsyncMock(return_value=put_response)
         result = await net.upload_asset("file.pdf", b"file content here")
-        assert result["id"] == "asset_1"
+        assert result.id == "asset_1"
         net._rpc.asset_get_upload_url.assert_awaited_once_with("file.pdf")
         net._rpc._client.put.assert_awaited_once()
 
@@ -906,14 +913,14 @@ class TestUploadAsset:
     async def test_uses_upload_url_key(self) -> None:
         net = _make_network()
         net._rpc.asset_get_upload_url = AsyncMock(
-            return_value={"upload_url": "https://upload.example.com/file2"}
+            return_value={"upload_url": "https://s3.amazonaws.com/bucket/file2"}
         )
         put_response = MagicMock()
         put_response.raise_for_status = MagicMock()
         net._rpc._client.put = AsyncMock(return_value=put_response)
         await net.upload_asset("image.png", b"binary")
         call_kwargs = net._rpc._client.put.call_args
-        assert call_kwargs[0][0] == "https://upload.example.com/file2"
+        assert call_kwargs[0][0] == "https://s3.amazonaws.com/bucket/file2"
 
     @pytest.mark.asyncio
     async def test_no_url_raises_upload_error(self) -> None:
@@ -949,7 +956,7 @@ class TestUploadAsset:
     async def test_put_failure_raises_upload_error(self) -> None:
         net = _make_network()
         net._rpc.asset_get_upload_url = AsyncMock(
-            return_value={"url": "https://upload.example.com/file"}
+            return_value={"url": "https://s3.amazonaws.com/bucket/file"}
         )
         put_response = MagicMock()
         put_response.raise_for_status.side_effect = Exception("upload failed")

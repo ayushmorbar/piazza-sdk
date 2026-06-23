@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security Vulnerability
-    url: mailto:security@example.com
-    about: Report security vulnerabilities privately
+    url: https://github.com/ayushmorbar/piazza-sdk/security/advisories/new
+    about: Report security vulnerabilities privately via GitHub

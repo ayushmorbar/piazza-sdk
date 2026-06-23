@@ -30,16 +30,20 @@ class Endorsement(BaseModel):
         facebook_id: Facebook ID of the endorser, if linked.
     """
 
-    role: str = ""
-    name: str = ""
-    endorser: str | None = None
-    admin: bool = False
-    photo: str | None = None
-    id: str = ""
-    photo_url: str | None = None
-    published: bool = False
-    us: bool = False
-    facebook_id: str | None = None
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    role: str = Field(default="", description="Endorser's role (e.g. student, instructor)")
+    name: str = Field(default="", description="Endorser display name")
+    endorser: str | None = Field(default=None, description="Endorser user ID, or None if anonymous")
+    admin: bool = Field(default=False, description="Whether the endorser is a network admin")
+    photo: str | None = Field(default=None, description="Endorser photo path, if available")
+    id: str = Field(default="", description="Endorsement record identifier")
+    photo_url: str | None = Field(default=None, description="Full URL to the endorser's photo")
+    published: bool = Field(default=False, description="Whether the endorsement is published")
+    us: bool = Field(default=False, description="Whether the endorser is a course staff member")
+    facebook_id: str | None = Field(
+        default=None, description="Facebook ID of the endorser, if linked"
+    )
 
 
 class ChangeLogEntry(BaseModel):
@@ -56,14 +60,22 @@ class ChangeLogEntry(BaseModel):
         cid: Child element ID the change relates to, if any.
     """
 
-    anon: AnonymityLevel = AnonymityLevel.NO
-    uid: str = ""
-    data: str | None = None
-    to: str | None = None
-    v: Visibility = Visibility.PUBLIC
-    type: ChangeType = ChangeType.CREATE
-    when: datetime | None = None
-    cid: str = ""
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    anon: AnonymityLevel = Field(
+        default=AnonymityLevel.NO,
+        description="Anonymity level of the change author",
+    )
+    uid: str = Field(default="", description="User ID of the person who made the change")
+    data: str | None = Field(default=None, description="Free-form data associated with the change")
+    to: str | None = Field(default=None, description="Target value after the change, if applicable")
+    v: Visibility = Field(default=Visibility.PUBLIC, description="Visibility of the change record")
+    type: ChangeType = Field(
+        default=ChangeType.CREATE,
+        description="Type of change (create, update, endorse, etc.)",
+    )
+    when: datetime | None = Field(default=None, description="Timestamp when the change occurred")
+    cid: str = Field(default="", description="Child element ID the change relates to, if any")
 
 
 class PostRevision(BaseModel):
@@ -81,11 +93,15 @@ class PostRevision(BaseModel):
         created: Timestamp when this revision was created.
     """
 
-    revision: int = 0
-    subject: str = ""
-    content: str = ""
-    uid: str = ""
-    created: datetime | None = None
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    revision: int = Field(default=0, description="Sequential revision number")
+    subject: str = Field(default="", description="Subject line at this revision")
+    content: str = Field(default="", description="Body content at this revision (HTML)")
+    uid: str = Field(default="", description="User ID of the editor")
+    created: datetime | None = Field(
+        default=None, description="Timestamp when this revision was created"
+    )
 
 
 class FollowUp(BaseModel):
@@ -101,13 +117,23 @@ class FollowUp(BaseModel):
         anon: Anonymity level of the author.
     """
 
-    id: str = ""
-    uid: str = ""
-    subject: str = ""
-    content: str = ""
-    created: datetime | None = None
-    updated: datetime | None = None
-    anon: AnonymityLevel = AnonymityLevel.NO
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    id: str = Field(default="", description="Unique identifier for this follow-up")
+    uid: str = Field(default="", description="Author's user ID")
+    subject: str = Field(default="", description="Follow-up subject line")
+    content: str = Field(default="", description="Follow-up body content (HTML)")
+    created: datetime | None = Field(
+        default=None, description="Timestamp when the follow-up was posted"
+    )
+    updated: datetime | None = Field(
+        default=None,
+        description="Timestamp when the follow-up was last edited",
+    )
+    anon: AnonymityLevel = Field(
+        default=AnonymityLevel.NO,
+        description="Anonymity level of the author",
+    )
 
 
 class Child(BaseModel):
@@ -126,16 +152,31 @@ class Child(BaseModel):
         followed: Whether the current user is following this element.
     """
 
-    id: str = ""
-    type: str = ""
-    subject: str = ""
-    content: str = ""
-    uid: str = ""
-    created: datetime | None = None
-    updated: datetime | None = None
-    anon: AnonymityLevel = AnonymityLevel.NO
-    no_answer: bool = False
-    followed: bool = False
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    id: str = Field(default="", description="Unique identifier for this child element")
+    type: str = Field(default="", description="Element type (e.g. followup, answer)")
+    subject: str = Field(default="", description="Child subject line")
+    content: str = Field(default="", description="Child body content (HTML)")
+    uid: str = Field(default="", description="Author's user ID")
+    created: datetime | None = Field(
+        default=None, description="Timestamp when the child was posted"
+    )
+    updated: datetime | None = Field(
+        default=None,
+        description="Timestamp when the child was last edited",
+    )
+    anon: AnonymityLevel = Field(
+        default=AnonymityLevel.NO,
+        description="Anonymity level of the author",
+    )
+    no_answer: bool = Field(
+        default=False, description="Whether this follow-up has no answer yet"
+    )
+    followed: bool = Field(
+        default=False,
+        description="Whether the current user is following this element",
+    )
 
 
 class Answer(BaseModel):
@@ -155,17 +196,35 @@ class Answer(BaseModel):
         folder: Folder assignment for this answer.
     """
 
-    id: str = ""
-    uid: str = ""
-    content: str = ""
-    created: datetime | None = None
-    updated: datetime | None = None
-    votes: int = 0
-    endorsements: list[Endorsement] = Field(default_factory=list)
-    is_instructor_answer: bool = False
-    is_student_answer: bool = False
-    rated: bool = False
-    folder: str = ""
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    id: str = Field(default="", description="Unique identifier for this answer")
+    uid: str = Field(default="", description="Author's user ID")
+    content: str = Field(default="", description="Answer body content (HTML)")
+    created: datetime | None = Field(
+        default=None, description="Timestamp when the answer was posted"
+    )
+    updated: datetime | None = Field(
+        default=None,
+        description="Timestamp when the answer was last edited",
+    )
+    votes: int = Field(
+        default=0, description="Number of votes/endorsements on this answer"
+    )
+    endorsements: list[Endorsement] = Field(
+        default_factory=list, description="List of endorsement records"
+    )
+    is_instructor_answer: bool = Field(
+        default=False, description="Whether the author is an instructor"
+    )
+    is_student_answer: bool = Field(
+        default=False, description="Whether the author is a student"
+    )
+    rated: bool = Field(
+        default=False,
+        description="Whether the current user has rated this answer",
+    )
+    folder: str = Field(default="", description="Folder assignment for this answer")
 
 
 class StudentInfo(BaseModel):
@@ -178,20 +237,41 @@ class StudentInfo(BaseModel):
         role: Student role string.
     """
 
-    uid: str = ""
-    name: str = ""
-    email: str = ""
-    role: str = ""
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    uid: str = Field(default="", description="Student's user ID")
+    name: str = Field(default="", description="Student display name")
+    email: str = Field(default="", description="Student email address")
+    role: str = Field(default="", description="Student role string")
 
 
 class PublishingOptions(BaseModel):
-    """Options for post creation/publishing behavior."""
+    """Options for post creation/publishing behavior.
 
-    model_config = ConfigDict(populate_by_name=True)
+    Attributes:
+        bypass_email: Skip sending email notifications for this post.
+            Serialized as ``bypass_email`` in the API.
+        silent_update: Skip "updated post" notifications.
+            Serialized as ``no_up_notify`` in the API.
+        anonymity: Anonymity level: ``"no"`` (real name), ``"stud"``
+            (students anonymous), ``"all"`` (everyone anonymous).
+    """
 
-    bypass_email: bool = Field(default=False, serialization_alias="bypass_email")
-    silent_update: bool = Field(default=False, serialization_alias="no_up_notify")
-    anonymity: Literal["no", "stud", "all"] = "no"
+    model_config = ConfigDict(slots=True, populate_by_name=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    bypass_email: bool = Field(
+        default=False,
+        serialization_alias="bypass_email",
+        description="Skip sending email notifications for this post",
+    )
+    silent_update: bool = Field(
+        default=False,
+        serialization_alias="no_up_notify",
+        description="Skip updated-post notifications",
+    )
+    anonymity: Literal["no", "stud", "all"] = Field(
+        default="no", description="Anonymity level: no, stud, or all"
+    )
 
     @field_serializer("bypass_email")
     def _bypass_email_int(self, v: bool) -> int:
@@ -219,9 +299,11 @@ class PostConfig(BaseModel):
         created: Timestamp when the configuration was created.
     """
 
-    name: str = ""
-    instructor_note: str = ""
-    created: str = ""
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    name: str = Field(default="", description="Configuration name or label")
+    instructor_note: str = Field(default="", description="Note from the instructor, if set")
+    created: str = Field(default="", description="Timestamp when the configuration was created")
 
 
 class Post(BaseModel):
@@ -229,32 +311,95 @@ class Post(BaseModel):
 
     Supports dot-notation access for all fields. Fields map directly
     from Piazza's internal JSON API structure.
+
+    Attributes:
+        id: Unique post identifier (e.g. ``"j5yj4g5d4p2qg3"``).
+        type: Post type (question, note, poll).
+        title: Post title/subject line.
+        subject: Alternative subject text (alias for title in some contexts).
+        author: Author's email or user identifier.
+        created_at: Timestamp when the post was created.
+        updated_at: Timestamp of the last update.
+        nr: Numeric post number within the network (e.g. 42).
+        raw: Raw API response dict for advanced use cases.
+        tags: List of user-defined tags.
+        folder: Folder name the post belongs to.
+        status: Post lifecycle status (active, resolved, closed, etc.).
+        views: Total view count.
+        unique_views: Unique viewer count (None if not available).
+        students: Student participant info.
+        followups: Follow-up questions/comments on this post.
+        answers: Answer posts on this post.
+        change_log: Edit history entries.
+        endorsements: Endorsement/upvote records.
+        config: Post configuration (instructor-only, etc.).
+        children: Child items (answers, follow-ups, comments).
+        user_name: Display name of the author.
+        visibility: Access level (public, instructors, group).
+        revisions: Full revision history.
     """
 
-    id: str
-    type: PostType = PostType.NOTE
-    title: str = ""
-    subject: str = ""
-    author: str = ""
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-    nr: int = 0
-    raw: dict[str, Any] = Field(default_factory=dict)
-    tags: list[str] = Field(default_factory=list)
-    folder: str = ""
-    status: PostStatus = PostStatus.ACTIVE
-    views: int = 0
-    unique_views: int | None = None
-    students: list[StudentInfo] = Field(default_factory=list)
-    followups: list[FollowUp] = Field(default_factory=list)
-    answers: list[Answer] = Field(default_factory=list)
-    change_log: list[ChangeLogEntry] = Field(default_factory=list)
-    endorsements: list[Endorsement] = Field(default_factory=list)
-    config: PostConfig = Field(default_factory=PostConfig)
-    children: list[Child] = Field(default_factory=list)
-    user_name: str = ""
-    visibility: Visibility = Visibility.PUBLIC
-    revisions: list[PostRevision] = Field(default_factory=list)
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    id: str = Field(description="Unique post identifier (e.g. j5yj4g5d4p2qg3)")
+    type: PostType = Field(default=PostType.NOTE, description="Post type (question, note, poll)")
+    title: str = Field(default="", description="Post title/subject line")
+    subject: str = Field(default="", description="Alternative subject text")
+    author: str = Field(default="", description="Author's email or user identifier")
+    created_at: datetime | None = Field(
+        default=None, description="Timestamp when the post was created"
+    )
+    updated_at: datetime | None = Field(
+        default=None, description="Timestamp of the last update"
+    )
+    nr: int = Field(
+        default=0, description="Numeric post number within the network"
+    )
+    raw: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Raw API response dict for advanced use cases",
+    )
+    tags: list[str] = Field(
+        default_factory=list, description="List of user-defined tags"
+    )
+    folder: str = Field(default="", description="Folder name the post belongs to")
+    status: PostStatus = Field(
+        default=PostStatus.ACTIVE, description="Post lifecycle status"
+    )
+    views: int = Field(default=0, description="Total view count")
+    unique_views: int | None = Field(
+        default=None, description="Unique viewer count"
+    )
+    students: list[StudentInfo] = Field(
+        default_factory=list, description="Student participant info"
+    )
+    followups: list[FollowUp] = Field(
+        default_factory=list,
+        description="Follow-up questions/comments on this post",
+    )
+    answers: list[Answer] = Field(
+        default_factory=list, description="Answer posts on this post"
+    )
+    change_log: list[ChangeLogEntry] = Field(
+        default_factory=list, description="Edit history entries"
+    )
+    endorsements: list[Endorsement] = Field(
+        default_factory=list, description="Endorsement/upvote records"
+    )
+    config: PostConfig = Field(
+        default_factory=PostConfig,
+        description="Post configuration (instructor-only, etc.)",
+    )
+    children: list[Child] = Field(
+        default_factory=list,
+        description="Child items (answers, follow-ups, comments)",
+    )
+    user_name: str = Field(default="", description="Display name of the author")
+    visibility: Visibility = Field(
+        default=Visibility.PUBLIC,
+        description="Access level (public, instructors, group)",
+    )
+    revisions: list[PostRevision] = Field(default_factory=list, description="Full revision history")
 
     @property
     def is_question(self) -> bool:
@@ -290,3 +435,27 @@ class Post(BaseModel):
     def instructor_answer(self) -> Child | None:
         """The first instructor answer child, if any."""
         return next((c for c in self.children if c.type == "i_answer"), None)
+
+
+class PostCreatedResponse(BaseModel):
+    """Response from creating a new post or follow-up.
+
+    Attributes:
+        id: The ID assigned to the newly created post or follow-up.
+    """
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    id: str = Field(description="New post or follow-up ID")
+
+
+class AssetUploadResponse(BaseModel):
+    """Response from uploading a file asset.
+
+    Attributes:
+        id: The asset's unique identifier.
+        url: The pre-signed upload URL (if available).
+    """
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    id: str = Field(description="Asset identifier")
+    url: str | None = Field(default=None, description="Pre-signed upload URL")

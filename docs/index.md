@@ -19,20 +19,20 @@ pip install piazza-sdk
 
 ```python
 import asyncio
-from piazza_sdk import Piazza, SessionConfig, SessionState
+from piazza_sdk import Piazza, PiazzaSession, SessionConfig
 
 
 async def main():
     config = SessionConfig(course_id="your_course_id")
 
-    async with SessionState(config) as session:
+    async with PiazzaSession(config) as session:
         await session.login(email="you@example.com", password="secret")
 
         piazza = Piazza(session)
         classes = await piazza.get_user_classes()
 
         for cls in classes:
-            print(cls.name, cls.id)
+            print(cls["name"], cls["nid"])
 
 
 asyncio.run(main())

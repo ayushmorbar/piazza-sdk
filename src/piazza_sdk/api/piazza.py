@@ -33,6 +33,17 @@ class Piazza:
     def __init__(self, session: SessionStateManager) -> None:
         self._session = session
         self._networks: dict[str, Network] = {}
+        self._user_rpc: RPC | None = None
+
+    def _get_user_rpc(self) -> RPC:
+        """Return a reusable RPC instance with no network ID (user-level endpoints)."""
+        if self._user_rpc is None:
+            self._user_rpc = RPC(
+                client=self._session.client,
+                base_url=self._session.config.base_url,
+                network_id="",
+            )
+        return self._user_rpc
 
     def network(self, nid: str) -> Network:
         """Get or create a Network instance for the given NID.
@@ -61,11 +72,12 @@ class Piazza:
         if self._session.needs_refresh:
             await self._session.refresh()
         try:
-            rpc = RPC(
-                client=self._session.client, base_url=self._session.config.base_url, network_id=""
+            raw = await self._get_user_rpc()._safe_call(
+                "/user/api/get_user_classes",
+                {},
+                error_msg="Failed to get user classes",
             )
-            raw = await rpc._request("POST", "/user/api/get_user_classes")
-            return raw.get("result", []) if isinstance(raw, dict) else []
+            return raw.get("result", []) if isinstance(raw, dict) else []  # type: ignore[no-any-return]
         except PiazzaSDKError:
             raise
         except Exception as exc:
@@ -82,11 +94,11 @@ class Piazza:
         if self._session.needs_refresh:
             await self._session.refresh()
         try:
-            rpc = RPC(
-                client=self._session.client, base_url=self._session.config.base_url, network_id=""
+            return await self._get_user_rpc()._safe_call(
+                "/user/api/get_user_profile",
+                {},
+                error_msg="Failed to get user profile",
             )
-            raw = await rpc._request("POST", "/user/api/get_user_profile")
-            return raw if isinstance(raw, dict) else {}
         except PiazzaSDKError:
             raise
         except Exception as exc:

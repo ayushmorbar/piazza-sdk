@@ -51,7 +51,7 @@ All re-exported from `src/piazza_sdk/__init__.py`:
 | `FeedItem` | id, type, post, network_name, course_name, unread | Feed entry |
 | `FeedFilter` | network, course, folder, type, tag, unread_only | Feed query filter |
 | `NetworkInfo` | id, name, course_number, school, term | Network metadata |
-| `Statistics` | id, name, post_count, enrollments | Network stats |
+| `Statistics` | posts, resolved, unresolved, users, instructors, students, total_views, total_endorsements, resolution_rate | Network stats |
 
 ## Error Hierarchy
 
@@ -69,6 +69,5 @@ PiazzaSDKError (base)
 ├── SearchError
 ├── StatisticsError
 ├── SessionClosedError
-├── SessionExpiredError
-└── LoginError
+└── UploadError
 ```

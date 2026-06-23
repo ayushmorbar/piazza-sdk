@@ -19,21 +19,28 @@ class NetworkInfo(BaseModel):
         year: Academic year string.
         users: Number of users enrolled.
         posts: Number of posts in the network.
+        folders: List of folder names available in the network.
+        instructors: List of instructor names.
+        status: Network status string (e.g. "active"), or None.
     """
 
-    id: str = ""
-    nid: str = ""
-    name: str = ""
-    course_number: str = ""
-    course_title: str = ""
-    instructor: str = ""
-    term: str = ""
-    year: str = ""
-    users: int = 0
-    posts: int = 0
-    folders: list[str] = Field(default_factory=list)
-    instructors: list[str] = Field(default_factory=list)
-    status: str | None = None
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    id: str = Field(default="", description="Piazza network identifier (numeric string)")
+    nid: str = Field(default="", description="Network ID used in API URLs")
+    name: str = Field(default="", description="Display name for the course")
+    course_number: str = Field(default="", description="Course catalog number (e.g. CS 101)")
+    course_title: str = Field(default="", description="Full course title")
+    instructor: str = Field(default="", description="Primary instructor name")
+    term: str = Field(default="", description="Academic term (e.g. Fall)")
+    year: str = Field(default="", description="Academic year string")
+    users: int = Field(default=0, description="Number of users enrolled")
+    posts: int = Field(default=0, description="Number of posts in the network")
+    folders: list[str] = Field(
+        default_factory=list, description="Folder names available in the network"
+    )
+    instructors: list[str] = Field(default_factory=list, description="Instructor names")
+    status: str | None = Field(default=None, description="Network status string (e.g. active)")
 
 
 class Statistics(BaseModel):
@@ -50,14 +57,16 @@ class Statistics(BaseModel):
         total_endorsements: Aggregate endorsement count.
     """
 
-    posts: int = 0
-    resolved: int = 0
-    unresolved: int = 0
-    users: int = 0
-    instructors: int = 0
-    students: int = 0
-    total_views: int = 0
-    total_endorsements: int = 0
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    posts: int = Field(default=0, description="Total number of posts")
+    resolved: int = Field(default=0, description="Number of resolved questions")
+    unresolved: int = Field(default=0, description="Number of unresolved questions")
+    users: int = Field(default=0, description="Total users participating")
+    instructors: int = Field(default=0, description="Number of instructors")
+    students: int = Field(default=0, description="Number of students")
+    total_views: int = Field(default=0, description="Aggregate view count")
+    total_endorsements: int = Field(default=0, description="Aggregate endorsement count")
 
     @property
     def resolution_rate(self) -> float:
@@ -71,13 +80,17 @@ class HallOfFameItem(BaseModel):
 
     Attributes:
         uid: User ID of the student.
-        votes: Number of upvotes/endorsements on the best answer.
-        response_time_seconds: Time-to-answer in seconds.
-        snippet: Text snippet of the best answer.
-        timestamp: Unix epoch timestamp of the answer.
+        votes: Number of upvotes/endorsements on the best answer
+            (serialized as ``nr`` in the API).
+        response_time_seconds: Time-to-answer in seconds
+            (serialized as ``time`` in the API).
+        snippet: Text snippet of the best answer
+            (serialized as ``text`` in the API).
+        timestamp: Unix epoch timestamp of the answer
+            (serialized as ``when`` in the API).
     """
 
-    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+    model_config = ConfigDict(slots=True, populate_by_name=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
     uid: str | None = None
     votes: int | None = Field(default=None, alias="nr")

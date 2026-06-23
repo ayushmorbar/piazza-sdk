@@ -25,9 +25,7 @@ class TestSessionStateManager:
     """Tests for SessionStateManager lifecycle."""
 
     def _make_manager(self, **kwargs) -> SessionStateManager:
-        config = SessionConfig(
-            email="test@example.com", password="pass123", course_id="test", **kwargs
-        )
+        config = SessionConfig(course_id="test", **kwargs)
         return SessionStateManager(config)
 
     def test_initial_state(self):

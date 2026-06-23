@@ -10,7 +10,7 @@
 
 ## Features
 
-- **Async/await** throughout with `httpx` and `aiohttp`
+- **Async/await** throughout with `httpx`
 - **Pydantic v2** models with dot-notation access
 - **Type hints** and PEP 561 `py.typed` marker
 - **Feed operations** — get, filter (unread, following, folder), search
@@ -108,6 +108,18 @@ except RateLimitError as e:
     print(f"Rate limited — retry after {e.retry_after_ms}ms")
 except PiazzaSDKError as e:
     print(f"SDK error: {e}")
+```
+
+### Domain Modules (Advanced)
+
+For hexagonal architecture or standalone use, the `domain` package provides async functions that operate directly on RPC/session objects:
+
+```python
+from piazza_sdk.domain import get_feed, create_post, search
+
+feed = await get_feed(rpc, network_id="abc123", limit=10)
+post = await create_post(rpc, network_id="abc123", subject="Question", content="...")
+results = await search(rpc, network_id="abc123", query="homework")
 ```
 
 ## Development

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "Ayush Morbar", email = ""}
+    {name = "Ayush Morbar", email = "ayushmorbar@users.noreply.github.com"}
 ]
 keywords = ["piazza", "api", "async", "sdk", "education"]
 classifiers = [
@@ -48,8 +48,10 @@ docs = [
 
 [project.urls]
 Homepage = "https://github.com/ayushmorbar/piazza-sdk"
+Documentation = "https://ayushmorbar.github.io/piazza_sdk/"
 Repository = "https://github.com/ayushmorbar/piazza-sdk"
 Issues = "https://github.com/ayushmorbar/piazza-sdk/issues"
+Changelog = "https://github.com/ayushmorbar/piazza-sdk/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/piazza_sdk"]

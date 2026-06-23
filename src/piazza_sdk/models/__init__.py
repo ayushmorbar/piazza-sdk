@@ -32,12 +32,14 @@ from piazza_sdk.models.feed import (
 from piazza_sdk.models.network import HallOfFameItem, NetworkInfo, Statistics
 from piazza_sdk.models.post import (
     Answer,
+    AssetUploadResponse,
     ChangeLogEntry,
     Child,
     Endorsement,
     FollowUp,
     Post,
     PostConfig,
+    PostCreatedResponse,
     PostRevision,
     PublishingOptions,
     StudentInfo,
@@ -47,6 +49,7 @@ from piazza_sdk.models.user import User, UserPreferences
 __all__ = [
     "AnonymityLevel",
     "Answer",
+    "AssetUploadResponse",
     "ChangeLogEntry",
     "ChangeType",
     "Child",
@@ -66,6 +69,7 @@ __all__ = [
     "NotificationType",
     "Post",
     "PostConfig",
+    "PostCreatedResponse",
     "PostRevision",
     "PostStatus",
     "PublishingOptions",

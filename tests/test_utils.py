@@ -5,6 +5,7 @@ from __future__ import annotations
 from piazza_sdk.utils.normalization import (
     html_to_markdown,
     normalize_content,
+    normalize_markdown,
     normalize_whitespace,
     strip_html_tags,
 )
@@ -124,3 +125,95 @@ class TestNormalizeContent:
     def test_explicit_plain(self):
         result = normalize_content("  spaces  ", "plain")
         assert result == "spaces"
+
+
+class TestNormalizeMarkdown:
+    """Tests for normalize_markdown function."""
+
+    def test_normalize_markdown_empty_string(self):
+        assert normalize_markdown("") == ""
+
+    def test_normalize_markdown_whitespace_only(self):
+        assert normalize_markdown("   ") == ""
+
+    def test_normalize_markdown_list_marker_star(self):
+        result = normalize_markdown("* item")
+        assert result == "- item"
+
+    def test_normalize_markdown_list_marker_plus(self):
+        result = normalize_markdown("+ item")
+        assert result == "- item"
+
+    def test_normalize_markdown_list_marker_dash(self):
+        result = normalize_markdown("- item")
+        assert result == "- item"
+
+    def test_normalize_markdown_list_marker_indented(self):
+        result = normalize_markdown("  * item")
+        assert result == "- item"
+
+    def test_normalize_markdown_list_multiple_items(self):
+        input_md = "* first\n+ second\n- third"
+        result = normalize_markdown(input_md)
+        assert result == "- first\n- second\n- third"
+
+    def test_normalize_markdown_heading_single_space(self):
+        result = normalize_markdown("## Title")
+        assert result == "## Title"
+
+    def test_normalize_markdown_heading_missing_space(self):
+        result = normalize_markdown("##Title")
+        assert result == "## Title"
+
+    def test_normalize_markdown_heading_all_levels(self):
+        input_md = "#H1\n##H2\n###H3\n####H4\n#####H5\n######H6"
+        result = normalize_markdown(input_md)
+        assert result == "# H1\n## H2\n### H3\n#### H4\n##### H5\n###### H6"
+
+    def test_normalize_markdown_heading_extraspace(self):
+        result = normalize_markdown("##  Title")
+        assert result == "## Title"
+
+    def test_normalize_markdown_trailing_whitespace(self):
+        result = normalize_markdown("line   \nmore   ")
+        assert result == "line\nmore"
+
+    def test_normalize_markdown_blank_line_collapse(self):
+        input_md = "a\n\n\n\nb"
+        result = normalize_markdown(input_md)
+        assert result == "a\n\nb"
+
+    def test_normalize_markdown_blank_line_three(self):
+        input_md = "a\n\n\nb"
+        result = normalize_markdown(input_md)
+        assert result == "a\n\nb"
+
+    def test_normalize_markdown_blank_line_two_unchanged(self):
+        input_md = "a\n\nb"
+        result = normalize_markdown(input_md)
+        assert result == "a\n\nb"
+
+    def test_normalize_markdown_already_clean(self):
+        input_md = "Heading\n\nSome text\n\nAnother paragraph"
+        result = normalize_markdown(input_md)
+        assert result == "Heading\n\nSome text\n\nAnother paragraph"
+
+    def test_normalize_markdown_mixed_content(self):
+        input_md = "# Heading\n\n* item1\n+ item2\n- item3\n\n##Subheading\n\nText here   "
+        result = normalize_markdown(input_md)
+        expected = "# Heading\n- item1\n- item2\n- item3\n\n## Subheading\n\nText here"
+        assert result == expected
+
+    def test_normalize_markdown_strip_leading_trailing(self):
+        result = normalize_markdown("\n\nHello\n\n")
+        assert result == "Hello"
+
+    def test_normalize_markdown_code_block_unchanged(self):
+        input_md = "```\ncode here\n```"
+        result = normalize_markdown(input_md)
+        assert result == "```\ncode here\n```"
+
+    def test_normalize_markdown_list_with_heading(self):
+        input_md = "* Item one\n##Section\n+ Item two"
+        result = normalize_markdown(input_md)
+        assert result == "- Item one\n## Section\n- Item two"

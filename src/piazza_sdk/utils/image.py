@@ -79,7 +79,7 @@ def detect_image_type(data: bytes) -> str | None:  # noqa: PLR0911
         return "image/gif"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
-    if data[:5] == b"<?xml" or data[:4] == b"<svg":
+    if data[:5] == b"<?xml" or data[:4].lower() == b"<svg":
         return "image/svg+xml"
     return None
 

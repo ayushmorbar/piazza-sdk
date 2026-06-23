@@ -14,26 +14,49 @@ class FeedItem(BaseModel):
     """A single item in a Piazza feed response.
 
     Represents a lightweight post reference suitable for list display.
+
+    Attributes:
+        id: Unique post identifier.
+        subject: Post title/subject line.
+        type: Feed item type (question, note, poll, etc.).
+        created: Timestamp when the post was created.
+        updated: Timestamp of the last update.
+        default_anonymity: Default anonymity setting for the post.
+        uid: Author user ID.
+        folder: Folder name the post belongs to.
+        no_answer: Whether the post has no answers yet.
+        is_pinned: Whether the post is pinned (serialized as ``pin``).
+        follows: Whether the current user is following this post.
+        viewed: Whether the current user has viewed this post.
+        reputation: Author's reputation score.
+        badge: Author's badge or role indicator.
+        tags: List of tags on the post.
+        content_snippet: Short content preview (serialized as ``content_snipet``,
+            note the misspelling in Piazza's API).
     """
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(slots=True, populate_by_name=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
-    id: str
-    subject: str = ""
-    type: FeedItemType | str = FeedItemType.UNKNOWN
-    created: datetime | None = None
-    updated: datetime | None = None
-    default_anonymity: FeedItemDefaultAnonymity | str = FeedItemDefaultAnonymity.UNKNOWN
-    uid: str = ""
-    folder: str = ""
-    no_answer: bool = False
-    is_pinned: bool = Field(default=False, alias="pin")
-    follows: bool = False
-    viewed: bool = True
-    reputation: int = 0
-    badge: str = ""
-    tags: list[str] = Field(default_factory=list)
-    content_snippet: str | None = Field(default=None, alias="content_snipet")
+    id: str = Field(description="Unique post identifier")
+    subject: str = Field(default="", description="Post title/subject line")
+    type: FeedItemType | str = Field(default=FeedItemType.UNKNOWN, description="Feed item type")
+    created: datetime | None = Field(default=None, description="When the post was created")
+    updated: datetime | None = Field(default=None, description="When the post was last updated")
+    default_anonymity: FeedItemDefaultAnonymity | str = Field(
+        default=FeedItemDefaultAnonymity.UNKNOWN, description="Default anonymity setting"
+    )
+    uid: str = Field(default="", description="Author user ID")
+    folder: str = Field(default="", description="Folder name")
+    no_answer: bool = Field(default=False, description="Whether post has no answers")
+    is_pinned: bool = Field(default=False, alias="pin", description="Whether post is pinned")
+    follows: bool = Field(default=False, description="Whether current user is following")
+    viewed: bool = Field(default=True, description="Whether current user has viewed")
+    reputation: int = Field(default=0, description="Author reputation score")
+    badge: str = Field(default="", description="Author badge or role indicator")
+    tags: list[str] = Field(default_factory=list, description="Post tags")
+    content_snippet: str | None = Field(
+        default=None, alias="content_snipet", description="Short content preview"
+    )
 
     @property
     def is_question(self) -> bool:
@@ -50,6 +73,8 @@ class Feed(BaseModel):
         page: Current page number.
         page_size: Number of items per page.
     """
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
     feed: list[FeedItem] = Field(default_factory=list)
     total: int = 0
@@ -71,6 +96,8 @@ class FeedFilter(BaseModel):
 class UnreadFilter(FeedFilter):
     """Filter feed to show only unread posts."""
 
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
     def to_kwargs(self) -> dict[str, Any]:
         """Return ``{"updated": True}`` for the unread filter."""
         return {"updated": True}
@@ -78,6 +105,8 @@ class UnreadFilter(FeedFilter):
 
 class FollowingFilter(FeedFilter):
     """Filter feed to show only followed posts."""
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
     def to_kwargs(self) -> dict[str, Any]:
         """Return ``{"following": True}`` for the following filter."""
@@ -90,6 +119,8 @@ class FolderFilter(FeedFilter):
     Attributes:
         folder_name: Name of the folder to filter by.
     """
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
     folder_name: str = ""
 
@@ -111,6 +142,8 @@ class SearchFilter(FeedFilter):
         limit: Maximum number of results.
         offset: Number of results to skip.
     """
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
     query: str = ""
     folder: str = ""
@@ -149,6 +182,8 @@ class SortFilter(FeedFilter):
     Attributes:
         order: Sort order (updated or created).
     """
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
     order: FeedSortOrder = FeedSortOrder.UPDATED
 

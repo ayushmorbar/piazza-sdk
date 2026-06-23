@@ -49,9 +49,15 @@ class CookieJar(BaseModel):
 
     Stores cookies as a dictionary with domain-based namespacing.
     Supports async persistence to/from disk with optional Fernet encryption.
+
+    Attributes:
+        cookies: Dictionary of cookie name-value pairs.
+        csrf_token: Persisted CSRF token for session restoration.
+        encryption_key: Fernet key for encrypting the cookie file (excluded from serialization).
     """
 
     cookies: dict[str, str] = Field(default_factory=dict)
+    csrf_token: str | None = Field(default=None)
     encryption_key: str | None = Field(default=None, exclude=True)
 
     def set(self, name: str, value: str) -> None:
@@ -63,8 +69,9 @@ class CookieJar(BaseModel):
         return self.cookies.get(name)
 
     def clear(self) -> None:
-        """Clear all cookies."""
+        """Clear all cookies and the persisted CSRF token."""
         self.cookies.clear()
+        self.csrf_token = None
 
     def to_header(self) -> str:
         """Serialize cookies to a Cookie header string."""
@@ -177,6 +184,8 @@ class CookieJar(BaseModel):
             data = json.loads(text)
             if isinstance(data, dict) and "cookies" in data:
                 self.cookies = data["cookies"]
+                # Restore persisted CSRF token (backward-compatible with old files)
+                self.csrf_token = data.get("csrf_token")
                 logger.debug("Cookies loaded from %s", path)
                 return True
         except (json.JSONDecodeError, KeyError) as exc:

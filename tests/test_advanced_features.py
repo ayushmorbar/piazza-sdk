@@ -898,11 +898,11 @@ class TestUploadAsset:
         )
         put_response = MagicMock()
         put_response.raise_for_status = MagicMock()
-        net._rpc._client.put = AsyncMock(return_value=put_response)
+        net._rpc.client.put = AsyncMock(return_value=put_response)
         result = await net.upload_asset("file.pdf", b"file content here")
         assert result.id == "asset_1"
         net._rpc.asset_get_upload_url.assert_awaited_once_with("file.pdf")
-        net._rpc._client.put.assert_awaited_once()
+        net._rpc.client.put.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_uses_upload_url_key(self) -> None:
@@ -912,9 +912,9 @@ class TestUploadAsset:
         )
         put_response = MagicMock()
         put_response.raise_for_status = MagicMock()
-        net._rpc._client.put = AsyncMock(return_value=put_response)
+        net._rpc.client.put = AsyncMock(return_value=put_response)
         await net.upload_asset("image.png", b"binary")
-        call_kwargs = net._rpc._client.put.call_args
+        call_kwargs = net._rpc.client.put.call_args
         assert call_kwargs[0][0] == "https://s3.amazonaws.com/bucket/file2"
 
     @pytest.mark.asyncio
@@ -953,6 +953,6 @@ class TestUploadAsset:
         )
         put_response = MagicMock()
         put_response.raise_for_status.side_effect = Exception("upload failed")
-        net._rpc._client.put = AsyncMock(return_value=put_response)
+        net._rpc.client.put = AsyncMock(return_value=put_response)
         with pytest.raises(UploadError, match="Failed to upload asset"):
             await net.upload_asset("file.pdf", b"data")

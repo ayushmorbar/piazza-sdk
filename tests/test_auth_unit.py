@@ -170,3 +170,46 @@ class TestCookieJarEncryption:
         jar = CookieJar(cookies={"x": "y"}, encryption_key=fernet_key)
         dumped = jar.model_dump()
         assert "encryption_key" not in dumped
+
+    @pytest.mark.asyncio
+    async def test_csrf_token_persists_round_trip(self, tmp_path, fernet_key):
+        """csrf_token survives save → load cycle (encrypted)."""
+        path = tmp_path / "csrf_encrypted.json"
+        original = CookieJar(
+            cookies={"session_id": "abc"}, csrf_token="tok_123_secret", encryption_key=fernet_key
+        )
+        await original.save(path)
+
+        loaded = CookieJar(cookies={}, encryption_key=fernet_key)
+        await loaded.load(path)
+        assert loaded.csrf_token == "tok_123_secret"
+        assert loaded.cookies == {"session_id": "abc"}
+
+    @pytest.mark.asyncio
+    async def test_csrf_token_persists_plaintext(self, tmp_path):
+        """csrf_token survives save → load cycle (plaintext)."""
+        path = tmp_path / "csrf_plain.json"
+        original = CookieJar(cookies={"s": "v"}, csrf_token="plain_tok")
+        await original.save(path)
+
+        loaded = CookieJar()
+        await loaded.load(path)
+        assert loaded.csrf_token == "plain_tok"
+
+    @pytest.mark.asyncio
+    async def test_csrf_token_backward_compat_no_field(self, tmp_path):
+        """Loading an old file without csrf_token leaves csrf_token as None."""
+        path = tmp_path / "old_format.json"
+        path.write_text('{"cookies": {"session_id": "abc"}}')
+
+        loaded = CookieJar()
+        await loaded.load(path)
+        assert loaded.csrf_token is None
+        assert loaded.cookies == {"session_id": "abc"}
+
+    def test_clear_resets_csrf_token(self):
+        """clear() wipes both cookies dict and csrf_token."""
+        jar = CookieJar(cookies={"s": "v"}, csrf_token="tok_xyz")
+        jar.clear()
+        assert jar.cookies == {}
+        assert jar.csrf_token is None

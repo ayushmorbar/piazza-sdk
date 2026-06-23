@@ -187,6 +187,8 @@ class SessionStateManager:
         # Persist CSRF token on client headers for future RPC calls
         assert self._client is not None  # noqa: S101 - guaranteed non-None after login
         self._client.headers["x-csrf-token"] = csrf_token
+        # Persist CSRF token in cookie jar for session resumption
+        self._cookies.csrf_token = csrf_token
 
         # Persist cookies if path configured
         if self._cookie_path is not None:
@@ -221,6 +223,9 @@ class SessionStateManager:
                 follow_redirects=True,
             )
             self._state = SessionState.UNAUTHENTICATED
+
+        # Clear stale CSRF token — will be re-fetched during login
+        self._cookies.csrf_token = None
 
         await self.login(email, password)
         logger.info("Session refreshed for course %s", self.config.course_id)
@@ -294,6 +299,10 @@ class SessionStateManager:
         )
         # Auto-restore persisted cookies if available
         await self.restore_cookies()
+        # Restore persisted CSRF token header for session resumption
+        if self._cookies.csrf_token is not None:
+            self._client.headers["x-csrf-token"] = self._cookies.csrf_token
+            logger.debug("Restored CSRF token from cookie jar")
         return self
 
     async def __aexit__(

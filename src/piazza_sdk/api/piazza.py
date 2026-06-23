@@ -39,7 +39,7 @@ class Piazza:
         """Return a reusable RPC instance with no network ID (user-level endpoints)."""
         if self._user_rpc is None:
             self._user_rpc = RPC(
-                client=self._session.client,
+                session=self._session,
                 base_url=self._session.config.base_url,
                 network_id="",
                 on_auth_error=self._session._rpc_refresh,
@@ -57,7 +57,7 @@ class Piazza:
         """
         if nid not in self._networks:
             rpc = RPC(
-                client=self._session.client,
+                session=self._session,
                 base_url=self._session.config.base_url,
                 network_id=nid,
                 on_auth_error=self._session._rpc_refresh,

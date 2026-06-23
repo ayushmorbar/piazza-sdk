@@ -71,20 +71,31 @@ class RPC:
 
     Handles HTTP requests with retry logic, error mapping, and
     response parsing.
+
+    RPC holds a reference to the *session adapter* rather than copying
+    the ``httpx.AsyncClient`` directly.  This ensures that after a
+    session refresh (which replaces the underlying client), all RPC
+    instances automatically use the new client without requiring
+    callers to re-create them.
     """
 
     def __init__(
         self,
-        client: httpx.AsyncClient,
+        session: Any,
         base_url: str,
         network_id: str,
         *,
         on_auth_error: Callable[[], Any] | None = None,
     ) -> None:
-        self._client = client
+        self._session = session
         self._base_url = base_url.rstrip("/")
         self._nid = network_id
         self._on_auth_error = on_auth_error
+
+    @property
+    def client(self) -> httpx.AsyncClient:
+        """Return the current httpx client from the session adapter."""
+        return self._session.client  # type: ignore[no-any-return]
 
     _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
@@ -107,7 +118,7 @@ class RPC:
         url = f"{self._base_url}/{endpoint.lstrip('/')}"
         logger.debug("RPC %s %s", method, url)
         try:
-            response = await self._client.request(method, url, **kwargs)
+            response = await self.client.request(method, url, **kwargs)
             logger.debug(
                 "RPC %s %s -> %d (%.1fms)",
                 method,

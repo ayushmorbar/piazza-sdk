@@ -443,7 +443,7 @@ async def upload_asset(
             raise ValidationError(
                 f"upload URL host '{parsed.hostname}' not in allowed list: {allowed_upload_hosts}"
             )
-        http_client = rpc._client
+        http_client = rpc.client
         response = await http_client.put(
             upload_url, content=file_data, headers={"Content-Type": content_type}
         )

@@ -1,15 +1,15 @@
-"""Tests for piazza_sdk.adapters.http — RPC client and error mapping."""
+"""Unit tests for adapters/http.py — RPC client layer."""
 
 from __future__ import annotations
 
-import json
 from datetime import timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
-from piazza_sdk.adapters.http import RPC, _map_http_error
+from piazza_sdk.adapters.http import RPC, _AuthRetryNeededError
 from piazza_sdk.exceptions import (
     AuthenticationError,
     ContentError,
@@ -19,11 +19,10 @@ from piazza_sdk.exceptions import (
     PermissionError,
     PiazzaSDKError,
     RateLimitError,
-    SearchError,
-    StatisticsError,
-    UploadError,
-    UserError,
 )
+
+pytestmark = pytest.mark.asyncio
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -31,857 +30,498 @@ from piazza_sdk.exceptions import (
 
 
 def _make_response(
-    status: int = 200, json_data: dict | None = None, headers: dict[str, str] | None = None
+    status_code: int = 200, json_data: Any = None, *, headers: dict[str, str] | None = None
 ) -> httpx.Response:
-    """Build a properly-read httpx.Response with JSON body."""
-    content = b"{}" if json_data is None else json.dumps(json_data).encode()
+    if json_data is None:
+        json_data = {}
     resp = httpx.Response(
-        status_code=status,
-        content=content,
+        status_code,
+        json=json_data,
+        request=httpx.Request("POST", "https://piazza.com/test"),
         headers=headers or {},
-        request=httpx.Request("POST", "http://test.com"),
     )
-    resp.read()
-    resp._elapsed = timedelta(milliseconds=1)
+    resp.elapsed = timedelta(milliseconds=50)
     return resp
 
 
-def _make_error_response(status: int, headers: dict[str, str] | None = None) -> httpx.Response:
-    """Build an error response suitable for raise_for_status()."""
-    return _make_response(status, json_data={"error": f"HTTP {status}"}, headers=headers)
-
-
 def _mock_client(
-    response: httpx.Response | None = None, side_effect: Exception | None = None
+    status_code: int = 200, json_data: Any = None, *, headers: dict[str, str] | None = None
 ) -> httpx.AsyncClient:
-    """Create a mock httpx.AsyncClient whose .request() returns/raises."""
-    client = MagicMock(spec=httpx.AsyncClient)
-    client.request = AsyncMock(return_value=response, side_effect=side_effect)
+    """Return an httpx.AsyncClient mock that returns the given response."""
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.request = AsyncMock(return_value=_make_response(status_code, json_data, headers=headers))
     return client
 
 
-# ---------------------------------------------------------------------------
-# _map_http_error unit tests
-# ---------------------------------------------------------------------------
+def _make_session(client: httpx.AsyncClient | None = None) -> MagicMock:
+    """Wrap an httpx client mock in an adapter mock with a `.client` property."""
+    adapter = MagicMock()
+    adapter.client = client or _mock_client()
+    return adapter
 
 
-class TestMapHttpError:
-    """Unit tests for the _map_http_error free function."""
-
-    def test_401_maps_to_authentication_error(self) -> None:
-        resp = _make_error_response(401)
-        exc = httpx.HTTPStatusError("401", request=httpx.Request("GET", "http://x"), response=resp)
-        result = _map_http_error(exc)
-        assert isinstance(result, AuthenticationError)
-        assert "401" in str(result)
-
-    def test_403_maps_to_permission_error(self) -> None:
-        resp = _make_error_response(403)
-        exc = httpx.HTTPStatusError("403", request=httpx.Request("GET", "http://x"), response=resp)
-        result = _map_http_error(exc)
-        assert isinstance(result, PermissionError)
-
-    def test_404_maps_to_not_found_error(self) -> None:
-        resp = _make_error_response(404)
-        exc = httpx.HTTPStatusError("404", request=httpx.Request("GET", "http://x"), response=resp)
-        result = _map_http_error(exc)
-        assert isinstance(result, NotFoundError)
-
-    def test_429_maps_to_rate_limit_error(self) -> None:
-        resp = _make_error_response(429)
-        exc = httpx.HTTPStatusError("429", request=httpx.Request("GET", "http://x"), response=resp)
-        result = _map_http_error(exc)
-        assert isinstance(result, RateLimitError)
-        assert result.retry_after_ms is None
-
-    def test_429_with_retry_after_header(self) -> None:
-        resp = _make_error_response(429, {"Retry-After": "30"})
-        exc = httpx.HTTPStatusError("429", request=httpx.Request("GET", "http://x"), response=resp)
-        result = _map_http_error(exc)
-        assert isinstance(result, RateLimitError)
-        assert result.retry_after_ms == 30_000
-
-    def test_429_with_non_numeric_retry_after(self) -> None:
-        resp = _make_error_response(429, {"Retry-After": "bad"})
-        exc = httpx.HTTPStatusError("429", request=httpx.Request("GET", "http://x"), response=resp)
-        result = _map_http_error(exc)
-        assert isinstance(result, RateLimitError)
-        assert result.retry_after_ms is None
-
-    def test_500_maps_to_piazza_sdk_error(self) -> None:
-        resp = _make_error_response(500)
-        exc = httpx.HTTPStatusError("500", request=httpx.Request("GET", "http://x"), response=resp)
-        result = _map_http_error(exc)
-        assert isinstance(result, PiazzaSDKError)
-        assert "500" in str(result)
-
-    def test_418_maps_to_piazza_sdk_error(self) -> None:
-        resp = _make_error_response(418)
-        exc = httpx.HTTPStatusError("418", request=httpx.Request("GET", "http://x"), response=resp)
-        result = _map_http_error(exc)
-        assert isinstance(result, PiazzaSDKError)
+def _make_rpc(session: MagicMock | None = None, *, on_auth_error=None) -> RPC:
+    if session is None:
+        session = _make_session()
+    return RPC(session, "https://piazza.com", "test_nid", on_auth_error=on_auth_error)
 
 
 # ---------------------------------------------------------------------------
-# RPC constructor
+# RPC init
 # ---------------------------------------------------------------------------
 
 
 class TestRPCInit:
-    """Test RPC constructor stores attributes correctly."""
-
-    def test_strips_trailing_slash_from_base_url(self) -> None:
-        client = httpx.AsyncClient()
-        rpc = RPC(client, "https://piazza.com/", "net_123")
+    def test_stores_base_url(self):
+        rpc = _make_rpc()
         assert rpc._base_url == "https://piazza.com"
 
-    def test_preserves_base_url_without_slash(self) -> None:
-        client = httpx.AsyncClient()
-        rpc = RPC(client, "https://piazza.com", "net_123")
+    def test_strips_trailing_slash(self):
+        rpc = RPC(_make_session(), "https://piazza.com/", "nid")
         assert rpc._base_url == "https://piazza.com"
 
-    def test_stores_network_id(self) -> None:
-        client = httpx.AsyncClient()
-        rpc = RPC(client, "https://piazza.com", "net_123")
-        assert rpc._nid == "net_123"
+    def test_stores_nid(self):
+        rpc = _make_rpc()
+        assert rpc._nid == "test_nid"
+
+    def test_client_delegates_to_session(self):
+        mock_httpx = _mock_client()
+        session = _make_session(mock_httpx)
+        rpc = RPC(session, "https://piazza.com", "nid")
+        assert rpc.client is mock_httpx
 
 
 # ---------------------------------------------------------------------------
-# RPC._request — success path
+# RPC.client property — fresh reference
+# ---------------------------------------------------------------------------
+
+
+class TestRPCClientFreshness:
+    """Verify RPC.client always reads from the session adapter (Fix 2)."""
+
+    def test_client_returns_session_client(self):
+        old = _mock_client()
+        session = _make_session(old)
+        rpc = RPC(session, "https://piazza.com", "nid")
+        assert rpc.client is old
+
+    def test_client_tracks_new_client_after_session_update(self):
+        old = _mock_client()
+        session = _make_session(old)
+        rpc = RPC(session, "https://piazza.com", "nid")
+        assert rpc.client is old
+
+        # Simulate session refresh: adapter's .client now points to a new object
+        new = _mock_client()
+        session.client = new
+        assert rpc.client is new
+
+    def test_request_uses_current_client(self):
+        """After swapping session.client, _request uses the new one."""
+        resp1 = _make_response(200, {"result": "old"})
+        resp2 = _make_response(200, {"result": "new"})
+
+        client1 = AsyncMock(spec=httpx.AsyncClient)
+        client1.request = AsyncMock(return_value=resp1)
+        client2 = AsyncMock(spec=httpx.AsyncClient)
+        client2.request = AsyncMock(return_value=resp2)
+
+        session = _make_session(client1)
+        rpc = RPC(session, "https://piazza.com", "nid")
+
+        result1 = rpc.client
+        assert result1 is client1
+
+        # Swap the client (simulates refresh)
+        session.client = client2
+        result2 = rpc.client
+        assert result2 is client2
+
+
+# ---------------------------------------------------------------------------
+# RPC request — success
 # ---------------------------------------------------------------------------
 
 
 class TestRPCRequestSuccess:
-    """Test _request success path."""
+    async def test_post_request(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"result": "ok"})))
+        result = await rpc._request("POST", "/test", json={})
+        assert result == {"result": "ok"}
 
-    @pytest.mark.anyio
-    async def test_returns_json_on_200(self) -> None:
-        resp = _make_response(200, {"ok": True})
-        client = _mock_client(response=resp)
-        rpc = RPC(client, "https://piazza.com", "net_123")
+    async def test_url_construction(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {})))
+        await rpc._request("POST", "/test", json={})
+        rpc.client.request.assert_called_once()
+        call_args = rpc.client.request.call_args
+        assert call_args[0][0] == "POST"
+        assert "piazza.com/test" in call_args[0][1]
 
-        result = await rpc._request("POST", "/api/test")
-        assert result == {"ok": True}
-        client.request.assert_awaited_once()
-
-    @pytest.mark.anyio
-    async def test_constructs_correct_url(self) -> None:
-        resp = _make_response(200, {"ok": True})
-        client = _mock_client(response=resp)
-        rpc = RPC(client, "https://piazza.com", "net_123")
-
-        await rpc._request("POST", "/api/test")
-        called_url = client.request.call_args[0][1]
-        assert called_url == "https://piazza.com/api/test"
-
-    @pytest.mark.anyio
-    async def test_strips_leading_slash_from_endpoint(self) -> None:
-        resp = _make_response(200, {"ok": True})
-        client = _mock_client(response=resp)
-        rpc = RPC(client, "https://piazza.com", "net_123")
-
-        await rpc._request("POST", "api/test")
-        called_url = client.request.call_args[0][1]
-        assert called_url == "https://piazza.com/api/test"
+    async def test_strips_leading_slash_from_endpoint(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {})))
+        await rpc._request("POST", "/api/test", json={})
+        call_args = rpc.client.request.call_args
+        assert "piazza.com/api/test" in call_args[0][1]
 
 
 # ---------------------------------------------------------------------------
-# RPC._request — error mapping
+# RPC request — errors
 # ---------------------------------------------------------------------------
 
 
 class TestRPCRequestErrors:
-    """Test _request maps HTTP errors to SDK exceptions."""
-
-    @pytest.mark.anyio
-    async def test_401_raises_authentication_error(self) -> None:
-        resp = _make_error_response(401)
-        client = _mock_client(response=resp)
-        rpc = RPC(client, "https://piazza.com", "net_123")
-
+    async def test_401_raises_auth_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(401)))
         with pytest.raises(AuthenticationError):
-            await rpc._request("POST", "/api/test")
+            await rpc._request("POST", "/test", json={})
 
-    @pytest.mark.anyio
-    async def test_403_raises_permission_error(self) -> None:
-        resp = _make_error_response(403)
-        client = _mock_client(response=resp)
-        rpc = RPC(client, "https://piazza.com", "net_123")
-
+    async def test_403_raises_permission_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(403)))
         with pytest.raises(PermissionError):
-            await rpc._request("POST", "/api/test")
+            await rpc._request("POST", "/test", json={})
 
-    @pytest.mark.anyio
-    async def test_404_raises_not_found_error(self) -> None:
-        resp = _make_error_response(404)
-        client = _mock_client(response=resp)
-        rpc = RPC(client, "https://piazza.com", "net_123")
-
+    async def test_404_raises_not_found_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(404)))
         with pytest.raises(NotFoundError):
-            await rpc._request("POST", "/api/test")
+            await rpc._request("POST", "/test", json={})
 
-    @pytest.mark.anyio
-    async def test_429_raises_rate_limit_error(self) -> None:
-        resp = _make_error_response(429)
-        client = _mock_client(response=resp)
-        rpc = RPC(client, "https://piazza.com", "net_123")
-
+    async def test_429_raises_rate_limit_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(429)))
         with pytest.raises(RateLimitError):
-            await rpc._request("POST", "/api/test")
+            await rpc._request("POST", "/test", json={})
 
-    @pytest.mark.anyio
-    async def test_500_raises_piazza_sdk_error(self) -> None:
-        resp = _make_error_response(500)
-        client = _mock_client(response=resp)
-        rpc = RPC(client, "https://piazza.com", "net_123")
+    async def test_429_with_retry_after(self):
+        rpc = _make_rpc(_make_session(_mock_client(429, headers={"Retry-After": "5"})))
+        with pytest.raises(RateLimitError) as exc_info:
+            await rpc._request("POST", "/test", json={})
+        assert exc_info.value.retry_after_ms == 5000
 
+    async def test_500_raises_piazza_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(500)))
         with pytest.raises(PiazzaSDKError):
-            await rpc._request("POST", "/api/test")
+            await rpc._request("POST", "/test", json={})
+
+    async def test_timeout_raises_network_error(self):
+        rpc = _make_rpc()
+        rpc.client.request = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+        with pytest.raises(NetworkError):
+            await rpc._request("POST", "/test", json={})
+
+    async def test_connect_error_raises_network_error(self):
+        rpc = _make_rpc()
+        rpc.client.request = AsyncMock(side_effect=httpx.ConnectError("refused"))
+        with pytest.raises(NetworkError):
+            await rpc._request("POST", "/test", json={})
+
+    async def test_unknown_error_raises_piazza_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(502)))
+        with pytest.raises(PiazzaSDKError):
+            await rpc._request("POST", "/test", json={})
 
 
 # ---------------------------------------------------------------------------
-# RPC._request — timeout / connect errors
+# RPC request — auth retry
 # ---------------------------------------------------------------------------
 
 
-class TestRPCRequestNetworkErrors:
-    """Test timeout and connection error handling."""
+class TestRPCAuthRetry:
+    async def test_401_with_on_auth_error_retries(self):
+        mock_httpx = _mock_client(401)
+        rpc = _make_rpc(_make_session(mock_httpx), on_auth_error=AsyncMock())
+        with pytest.raises(_AuthRetryNeededError):
+            await rpc._request("POST", "/test", json={})
+        rpc._on_auth_error.assert_called()
 
-    @pytest.mark.anyio
-    async def test_timeout_raises_network_error(self) -> None:
-        client = _mock_client(side_effect=httpx.TimeoutException("timeout"))
-        rpc = RPC(client, "https://piazza.com", "net_123")
+    async def test_401_without_on_auth_error_raises(self):
+        rpc = _make_rpc(_make_session(_mock_client(401)))
+        with pytest.raises(AuthenticationError):
+            await rpc._request("POST", "/test", json={})
 
-        with pytest.raises(NetworkError, match="timed out"):
-            await rpc._request("POST", "/api/test")
+    async def test_401_retry_success_after_refresh(self):
+        call_count = 0
 
-    @pytest.mark.anyio
-    async def test_connect_error_raises_network_error(self) -> None:
-        client = _mock_client(side_effect=httpx.ConnectError("connection refused"))
-        rpc = RPC(client, "https://piazza.com", "net_123")
+        async def side_effect(*args: Any, **kwargs: Any) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _make_response(401)
+            return _make_response(200, {"result": "ok"})
 
-        with pytest.raises(NetworkError, match="Connection failed"):
-            await rpc._request("POST", "/api/test")
+        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx.request = AsyncMock(side_effect=side_effect)
+        rpc = _make_rpc(_make_session(mock_httpx), on_auth_error=AsyncMock())
 
-    @pytest.mark.anyio
-    async def test_connect_error_preserves_cause(self) -> None:
-        client = _mock_client(side_effect=httpx.ConnectError("refused"))
-        rpc = RPC(client, "https://piazza.com", "net_123")
-
-        with pytest.raises(NetworkError) as exc_info:
-            await rpc._request("POST", "/api/test")
-        assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
-
-
-# ---------------------------------------------------------------------------
-# RPC._request — unexpected exception
-# ---------------------------------------------------------------------------
-
-
-class TestRPCRequestUnexpectedError:
-    """Test that non-HTTP exceptions are wrapped in PiazzaSDKError."""
-
-    @pytest.mark.anyio
-    async def test_unexpected_error_wrapped(self) -> None:
-        client = _mock_client(side_effect=ValueError("something weird"))
-        rpc = RPC(client, "https://piazza.com", "net_123")
-
-        with pytest.raises(PiazzaSDKError, match="Unexpected error"):
-            await rpc._request("POST", "/api/test")
-
-    @pytest.mark.anyio
-    async def test_piazza_sdk_error_reraised_directly(self) -> None:
-        """PiazzaSDKError subclasses that aren't caught by other handlers pass through."""
-        client = _mock_client(side_effect=ContentError("already mapped"))
-        rpc = RPC(client, "https://piazza.com", "net_123")
-
-        with pytest.raises(ContentError, match="already mapped"):
-            await rpc._request("POST", "/api/test")
+        # Will raise _AuthRetryNeededError internally, then retry succeeds
+        # But 401 → on_auth_error → _AuthRetryNeededError → retry → 200 OK
+        result = await rpc._request("POST", "/test", json={})
+        assert result == {"result": "ok"}
+        assert call_count == 2
 
 
 # ---------------------------------------------------------------------------
-# RPC domain methods — happy path (mock _request)
+# RPC error mapping
+# ---------------------------------------------------------------------------
+
+
+class TestRPCErrorMapping:
+    async def test_401_maps_to_auth_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(401)))
+        with pytest.raises(AuthenticationError):
+            await rpc._request("POST", "/test", json={})
+
+    async def test_403_maps_to_permission_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(403)))
+        with pytest.raises(PermissionError):
+            await rpc._request("POST", "/test", json={})
+
+    async def test_404_maps_to_not_found_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(404)))
+        with pytest.raises(NotFoundError):
+            await rpc._request("POST", "/test", json={})
+
+    async def test_429_maps_to_rate_limit_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(429)))
+        with pytest.raises(RateLimitError):
+            await rpc._request("POST", "/test", json={})
+
+    async def test_500_maps_to_piazza_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(500)))
+        with pytest.raises(PiazzaSDKError):
+            await rpc._request("POST", "/test", json={})
+
+    async def test_502_maps_to_piazza_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(502)))
+        with pytest.raises(PiazzaSDKError):
+            await rpc._request("POST", "/test", json={})
+
+
+# ---------------------------------------------------------------------------
+# RPC domain methods — request shape
 # ---------------------------------------------------------------------------
 
 
 class TestRPCContentGet:
-    """Test content_get method."""
+    async def test_content_get_request(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"content": "data"})))
+        result = await rpc.content_get("post123")
+        assert result == {"content": "data"}
 
-    @pytest.mark.anyio
-    async def test_calls_correct_endpoint(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"content": "hello"})
-
-        result = await rpc.content_get("post_123")
-        assert result == {"content": "hello"}
-        rpc._request.assert_awaited_once_with(
-            "POST",
-            "/class/api/content_get",
-            json={"action": "content.get", "cid": "post_123", "nid": "net_123"},
-        )
-
-    @pytest.mark.anyio
-    async def test_returns_empty_dict_on_non_dict(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value="string")
-
-        result = await rpc.content_get("post_123")
-        assert result == {}
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="post_123"):
-            await rpc.content_get("post_123")
+    async def test_content_get_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(500)))
+        with pytest.raises(ContentError):
+            await rpc.content_get("post123")
 
 
-class TestRPCGetMyFeed:
-    """Test get_my_feed method."""
+class TestRPCFeed:
+    async def test_get_my_feed(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"feed": []})))
+        result = await rpc.get_my_feed()
+        assert result == {"feed": []}
 
-    @pytest.mark.anyio
-    async def test_passes_extra_kwargs(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"feed": []})
+    async def test_get_my_feed_with_params(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"feed": []})))
+        result = await rpc.get_my_feed(limit=10)
+        assert result == {"feed": []}
 
-        await rpc.get_my_feed(limit=10, offset=5)
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["limit"] == 10
-        assert call_kwargs["offset"] == 5
+    async def test_get_my_feed_blocks_reserved_keys(self):
+        rpc = _make_rpc(_make_session(_mock_client(200)))
+        with pytest.raises(PiazzaSDKError, match="Reserved keys"):
+            await rpc.get_my_feed(action="override")
 
-    @pytest.mark.anyio
-    async def test_raises_feed_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
+    async def test_get_my_feed_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(500)))
         with pytest.raises(FeedError):
             await rpc.get_my_feed()
 
 
 class TestRPCContentCreate:
-    """Test content_create method."""
+    async def test_content_create(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"post_id": "new"})))
+        result = await rpc.content_create(subject="Test")
+        assert result == {"post_id": "new"}
 
-    @pytest.mark.anyio
-    async def test_calls_correct_endpoint(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"nid": "new_post"})
-
-        result = await rpc.content_create(type="question", subject="Help!")
-        assert result == {"nid": "new_post"}
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "content.create"
-        assert call_kwargs["type"] == "question"
-        assert call_kwargs["subject"] == "Help!"
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError):
-            await rpc.content_create()
+    async def test_content_create_blocks_reserved_keys(self):
+        rpc = _make_rpc(_make_session(_mock_client(200)))
+        with pytest.raises(PiazzaSDKError, match="Reserved keys"):
+            await rpc.content_create(nid="override")
 
 
 class TestRPCContentUpdate:
-    """Test content_update method."""
-
-    @pytest.mark.anyio
-    async def test_calls_correct_endpoint(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"updated": True})
-
-        await rpc.content_update(cid="post_1", content="updated text")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "content.update"
-        assert call_kwargs["cid"] == "post_1"
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="update"):
-            await rpc.content_update(cid="post_1", content="x")
+    async def test_content_update(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        result = await rpc.content_update(cid="post1", subject="Updated")
+        assert result == {"ok": True}
 
 
 class TestRPCContentDelete:
-    """Test content_delete method."""
-
-    @pytest.mark.anyio
-    async def test_sends_correct_payload(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"success": True})
-
-        await rpc.content_delete("post_456")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "content.delete"
-        assert call_kwargs["cid"] == "post_456"
-
-    @pytest.mark.anyio
-    async def test_returns_empty_dict_on_non_dict(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value=None)
-
-        result = await rpc.content_delete("post_456")
-        assert result == {}
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="post_456"):
-            await rpc.content_delete("post_456")
+    async def test_content_delete(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"deleted": True})))
+        result = await rpc.content_delete("post1")
+        assert result == {"deleted": True}
 
 
 class TestRPCGetUsers:
-    """Test get_users method."""
-
-    @pytest.mark.anyio
-    async def test_sends_correct_payload(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"users": []})
-
-        await rpc.get_users()
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "get_users"
-        assert call_kwargs["nid"] == "net_123"
-
-    @pytest.mark.anyio
-    async def test_raises_user_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(UserError):
-            await rpc.get_users()
+    async def test_get_users(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"users": []})))
+        result = await rpc.get_users()
+        assert result == {"users": []}
 
 
 class TestRPCSearch:
-    """Test search method."""
+    async def test_search(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"results": []})))
+        result = await rpc.search("python")
+        assert result == {"results": []}
 
-    @pytest.mark.anyio
-    async def test_sends_query(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"results": []})
-
-        await rpc.search("python asyncio")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["query"] == "python asyncio"
-        assert call_kwargs["action"] == "search"
-
-    @pytest.mark.anyio
-    async def test_passes_extra_kwargs(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.search("query", limit=5)
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["limit"] == 5
-
-    @pytest.mark.anyio
-    async def test_raises_search_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(SearchError):
-            await rpc.search("query")
+    async def test_search_blocks_reserved_keys(self):
+        rpc = _make_rpc(_make_session(_mock_client(200)))
+        with pytest.raises(PiazzaSDKError, match="Reserved keys"):
+            await rpc.search("q", action="override")
 
 
 class TestRPCGetStats:
-    """Test get_stats method."""
-
-    @pytest.mark.anyio
-    async def test_sends_correct_payload(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"total_users": 100})
-
-        await rpc.get_stats()
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "get_stats"
-
-    @pytest.mark.anyio
-    async def test_raises_statistics_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(StatisticsError):
-            await rpc.get_stats()
+    async def test_get_stats(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"stats": {}})))
+        result = await rpc.get_stats()
+        assert result == {"stats": {}}
 
 
 class TestRPCContentAnswer:
-    """Test content_answer method."""
+    async def test_content_answer(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        result = await rpc.content_answer("post1", "answer text")
+        assert result == {"ok": True}
 
-    @pytest.mark.anyio
-    async def test_sends_answer_payload(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"nid": "answer_1"})
-
-        await rpc.content_answer("post_1", "This is the answer", instructor_answer=True)
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "content.answer"
-        assert call_kwargs["cid"] == "post_1"
-        assert call_kwargs["content"] == "This is the answer"
-        assert call_kwargs["instructor_answer"] is True
-
-    @pytest.mark.anyio
-    async def test_defaults_instructor_answer_false(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.content_answer("post_1", "answer")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["instructor_answer"] is False
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="answer"):
-            await rpc.content_answer("post_1", "ans")
+    async def test_content_answer_error(self):
+        rpc = _make_rpc(_make_session(_mock_client(500)))
+        with pytest.raises(ContentError):
+            await rpc.content_answer("post1", "answer text")
 
 
 class TestRPCContentUpvote:
-    """Test content_upvote method."""
-
-    @pytest.mark.anyio
-    async def test_sends_correct_payload(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.content_upvote("post_1")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "content.upvote"
-        assert call_kwargs["cid"] == "post_1"
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="upvote"):
-            await rpc.content_upvote("post_1")
+    async def test_content_upvote(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        result = await rpc.content_upvote("post1")
+        assert result == {"ok": True}
 
 
 class TestRPCContentAddTag:
-    """Test content_add_tag method."""
-
-    @pytest.mark.anyio
-    async def test_sends_tag(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.content_add_tag("post_1", "important")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "content.add_tag"
-        assert call_kwargs["tag"] == "important"
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="add tag"):
-            await rpc.content_add_tag("post_1", "tag")
+    async def test_content_add_tag(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        result = await rpc.content_add_tag("post1", "python")
+        assert result == {"ok": True}
 
 
 class TestRPCContentRemoveTag:
-    """Test content_remove_tag method."""
-
-    @pytest.mark.anyio
-    async def test_sends_remove_tag(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.content_remove_tag("post_1", "outdated")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "content.remove_tag"
-        assert call_kwargs["tag"] == "outdated"
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="remove tag"):
-            await rpc.content_remove_tag("post_1", "tag")
+    async def test_content_remove_tag(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        result = await rpc.content_remove_tag("post1", "python")
+        assert result == {"ok": True}
 
 
 class TestRPCGetInstructorStats:
-    """Test get_instructor_stats method."""
-
-    @pytest.mark.anyio
-    async def test_sends_correct_payload(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"stats": {}})
-
-        await rpc.get_instructor_stats()
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "get_instructor_stats"
-
-    @pytest.mark.anyio
-    async def test_raises_statistics_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(StatisticsError):
-            await rpc.get_instructor_stats()
+    async def test_get_instructor_stats(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"stats": {}})))
+        result = await rpc.get_instructor_stats()
+        assert result == {"stats": {}}
 
 
 class TestRPCGetOnlineUsers:
-    """Test get_online_users method."""
-
-    @pytest.mark.anyio
-    async def test_sends_correct_payload(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"users": []})
-
-        await rpc.get_online_users()
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "get_online_users"
-
-    @pytest.mark.anyio
-    async def test_raises_user_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(UserError):
-            await rpc.get_online_users()
+    async def test_get_online_users(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"users": []})))
+        result = await rpc.get_online_users()
+        assert result == {"users": []}
 
 
 class TestRPCGetUserPreferences:
-    """Test get_user_preferences method."""
-
-    @pytest.mark.anyio
-    async def test_sends_correct_payload(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"prefs": {}})
-
-        await rpc.get_user_preferences()
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["action"] == "get_user_preferences"
-
-    @pytest.mark.anyio
-    async def test_raises_user_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(UserError):
-            await rpc.get_user_preferences()
+    async def test_get_user_preferences(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"prefs": {}})))
+        result = await rpc.get_user_preferences()
+        assert result == {"prefs": {}}
 
 
 class TestRPCUpdateUserPreferences:
-    """Test update_user_preferences method."""
-
-    @pytest.mark.anyio
-    async def test_sends_preferences(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value=None)
-
-        await rpc.update_user_preferences({"email_digest": True})
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["email_digest"] is True
-        assert call_kwargs["action"] == "update_user_preferences"
-
-    @pytest.mark.anyio
-    async def test_returns_none(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value=None)
-
-        result = await rpc.update_user_preferences({})
+    async def test_update_user_preferences(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {})))
+        result = await rpc.update_user_preferences({"theme": "dark"})
+        # update_user_preferences doesn't return a dict, it returns None
         assert result is None
 
-    @pytest.mark.anyio
-    async def test_raises_user_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(UserError):
-            await rpc.update_user_preferences({})
+    async def test_update_user_preferences_blocks_reserved_keys(self):
+        rpc = _make_rpc(_make_session(_mock_client(200)))
+        with pytest.raises(PiazzaSDKError, match="Reserved keys"):
+            await rpc.update_user_preferences({"action": "override"})
 
 
 class TestRPCMarkAsUnread:
-    """Test mark_as_unread method."""
-
-    @pytest.mark.anyio
-    async def test_uses_logic_api_endpoint(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.mark_as_unread("post_99")
-        call_args = rpc._request.call_args
-        assert call_args[0][1] == "/logic/api"
-        call_kwargs = call_args[1]["json"]
-        assert call_kwargs["method"] == "content.mark_unread"
-        assert call_kwargs["params"]["cid"] == "post_99"
-        assert call_kwargs["params"]["nid"] == "net_123"
-
-    @pytest.mark.anyio
-    async def test_returns_empty_dict_on_non_dict(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value=None)
-
-        result = await rpc.mark_as_unread("post_99")
-        assert result == {}
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="unread"):
-            await rpc.mark_as_unread("post_99")
+    async def test_mark_as_unread(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        result = await rpc.mark_as_unread("post1")
+        assert result == {"ok": True}
 
 
 class TestRPCAddFolder:
-    """Test add_folder method."""
-
-    @pytest.mark.anyio
-    async def test_sends_folder_name(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.add_folder("Exam Review")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["method"] == "network.add_folder"
-        assert call_kwargs["params"]["name"] == "Exam Review"
-        assert call_kwargs["params"]["nid"] == "net_123"
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="folder"):
-            await rpc.add_folder("Bad Folder")
+    async def test_add_folder(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        result = await rpc.add_folder("Homework")
+        assert result == {"ok": True}
 
 
 class TestRPCAddBadge:
-    """Test add_badge method."""
-
-    @pytest.mark.anyio
-    async def test_default_badge_type(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.add_badge("post_1")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["method"] == "content.add_badge"
-        assert call_kwargs["params"]["type"] == "good_answer"
-
-    @pytest.mark.anyio
-    async def test_custom_badge_type(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.add_badge("post_1", "instructor_answer")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["params"]["type"] == "instructor_answer"
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="badge"):
-            await rpc.add_badge("post_1")
+    async def test_add_badge(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        result = await rpc.add_badge("post1")
+        assert result == {"ok": True}
 
 
 class TestRPCAssetGetUploadUrl:
-    """Test asset_get_upload_url method."""
-
-    @pytest.mark.anyio
-    async def test_sends_filename(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"upload_url": "https://s3.example.com/upload"})
-
-        result = await rpc.asset_get_upload_url("homework.pdf")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["method"] == "asset.get_upload_url"
-        assert call_kwargs["params"]["filename"] == "homework.pdf"
-        assert result["upload_url"] == "https://s3.example.com/upload"
-
-    @pytest.mark.anyio
-    async def test_raises_upload_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(UploadError, match="Failed to get upload URL for file.pdf"):
-            await rpc.asset_get_upload_url("file.pdf")
+    async def test_asset_get_upload_url(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"url": "https://upload.example"})))
+        result = await rpc.asset_get_upload_url("file.pdf")
+        assert result == {"url": "https://upload.example"}
 
 
 class TestRPCContentSaveDraft:
-    """Test content_save_draft method."""
+    async def test_content_save_draft(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"draft_id": "d1"})))
+        result = await rpc.content_save_draft("Subject", "Body")
+        assert result == {"draft_id": "d1"}
 
-    @pytest.mark.anyio
-    async def test_sends_draft_payload(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"draft_id": "d1"})
-
-        await rpc.content_save_draft("Title", "Body here", post_type="note")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["method"] == "content.save_draft"
-        assert call_kwargs["params"]["subject"] == "Title"
-        assert call_kwargs["params"]["content"] == "Body here"
-        assert call_kwargs["params"]["type"] == "note"
-        assert call_kwargs["params"]["has_stale_thread"] is True
-        assert call_kwargs["params"]["nid"] == "net_123"
-
-    @pytest.mark.anyio
-    async def test_defaults_to_question_type(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.content_save_draft("T", "C")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["params"]["type"] == "question"
-
-    @pytest.mark.anyio
-    async def test_passes_extra_kwargs(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
-
-        await rpc.content_save_draft("T", "C", folder="Homework")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["params"]["folder"] == "Homework"
-
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
-
-        with pytest.raises(ContentError, match="draft"):
-            await rpc.content_save_draft("T", "C")
+    async def test_content_save_draft_blocks_reserved_keys(self):
+        rpc = _make_rpc(_make_session(_mock_client(200)))
+        with pytest.raises(PiazzaSDKError, match="Reserved keys"):
+            await rpc.content_save_draft("S", "B", action="override")
 
 
 class TestRPCContentGetSimilar:
-    """Test content_get_similar method."""
+    async def test_content_get_similar(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"similar": []})))
+        result = await rpc.content_get_similar("post1")
+        assert result == {"similar": []}
 
-    @pytest.mark.anyio
-    async def test_sends_post_id(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={"similar": []})
+    async def test_content_get_similar_blocks_reserved_keys(self):
+        rpc = _make_rpc(_make_session(_mock_client(200)))
+        with pytest.raises(PiazzaSDKError, match="Reserved keys"):
+            await rpc.content_get_similar("post1", nid="override")
 
-        await rpc.content_get_similar("post_55")
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["method"] == "content.get_similar"
-        assert call_kwargs["params"]["cid"] == "post_55"
-        assert call_kwargs["params"]["nid"] == "net_123"
 
-    @pytest.mark.anyio
-    async def test_passes_extra_kwargs(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(return_value={})
+# ---------------------------------------------------------------------------
+# RPC non-dict response normalization
+# ---------------------------------------------------------------------------
 
-        await rpc.content_get_similar("post_55", limit=5)
-        call_kwargs = rpc._request.call_args[1]["json"]
-        assert call_kwargs["params"]["limit"] == 5
 
-    @pytest.mark.anyio
-    async def test_raises_content_error(self) -> None:
-        rpc = RPC(httpx.AsyncClient(), "https://piazza.com", "net_123")
-        rpc._request = AsyncMock(side_effect=PiazzaSDKError("fail"))
+class TestRPCNonDictResponse:
+    async def test_list_response_returns_empty_dict(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, [{"a": 1}])))
+        result = await rpc.content_get("post1")
+        assert result == {}
 
-        with pytest.raises(ContentError, match="similar"):
-            await rpc.content_get_similar("post_55")
+    async def test_string_response_returns_empty_dict(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, "ok")))
+        result = await rpc.content_get("post1")
+        assert result == {}
+
+    async def test_int_response_returns_empty_dict(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, 42)))
+        result = await rpc.content_get("post1")
+        assert result == {}

@@ -29,10 +29,9 @@ from piazza_sdk.exceptions import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_response(
-    status: int = 200,
-    json_data: dict | None = None,
-    headers: dict[str, str] | None = None,
+    status: int = 200, json_data: dict | None = None, headers: dict[str, str] | None = None
 ) -> httpx.Response:
     """Build a properly-read httpx.Response with JSON body."""
     content = b"{}" if json_data is None else json.dumps(json_data).encode()
@@ -53,8 +52,7 @@ def _make_error_response(status: int, headers: dict[str, str] | None = None) -> 
 
 
 def _mock_client(
-    response: httpx.Response | None = None,
-    side_effect: Exception | None = None,
+    response: httpx.Response | None = None, side_effect: Exception | None = None
 ) -> httpx.AsyncClient:
     """Create a mock httpx.AsyncClient whose .request() returns/raises."""
     client = MagicMock(spec=httpx.AsyncClient)
@@ -65,6 +63,7 @@ def _mock_client(
 # ---------------------------------------------------------------------------
 # _map_http_error unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestMapHttpError:
     """Unit tests for the _map_http_error free function."""
@@ -127,6 +126,7 @@ class TestMapHttpError:
 # RPC constructor
 # ---------------------------------------------------------------------------
 
+
 class TestRPCInit:
     """Test RPC constructor stores attributes correctly."""
 
@@ -149,6 +149,7 @@ class TestRPCInit:
 # ---------------------------------------------------------------------------
 # RPC._request — success path
 # ---------------------------------------------------------------------------
+
 
 class TestRPCRequestSuccess:
     """Test _request success path."""
@@ -187,6 +188,7 @@ class TestRPCRequestSuccess:
 # ---------------------------------------------------------------------------
 # RPC._request — error mapping
 # ---------------------------------------------------------------------------
+
 
 class TestRPCRequestErrors:
     """Test _request maps HTTP errors to SDK exceptions."""
@@ -241,6 +243,7 @@ class TestRPCRequestErrors:
 # RPC._request — timeout / connect errors
 # ---------------------------------------------------------------------------
 
+
 class TestRPCRequestNetworkErrors:
     """Test timeout and connection error handling."""
 
@@ -274,6 +277,7 @@ class TestRPCRequestNetworkErrors:
 # RPC._request — unexpected exception
 # ---------------------------------------------------------------------------
 
+
 class TestRPCRequestUnexpectedError:
     """Test that non-HTTP exceptions are wrapped in PiazzaSDKError."""
 
@@ -298,6 +302,7 @@ class TestRPCRequestUnexpectedError:
 # ---------------------------------------------------------------------------
 # RPC domain methods — happy path (mock _request)
 # ---------------------------------------------------------------------------
+
 
 class TestRPCContentGet:
     """Test content_get method."""

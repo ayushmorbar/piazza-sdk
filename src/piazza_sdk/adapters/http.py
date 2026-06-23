@@ -62,10 +62,7 @@ def _map_http_error(exc: httpx.HTTPStatusError) -> PiazzaSDKError:
             with contextlib.suppress(ValueError):
                 raw = int(retry_after) * 1000
                 retry_after_ms = max(0, min(raw, 30_000))
-        return RateLimitError(
-            f"Rate limited: {status}",
-            retry_after_ms=retry_after_ms,
-        )
+        return RateLimitError(f"Rate limited: {status}", retry_after_ms=retry_after_ms)
     return PiazzaSDKError(f"HTTP error {status}")
 
 
@@ -121,9 +118,7 @@ class RPC:
             # Let tenacity retry on transient server errors
             if response.status_code in self._RETRYABLE_STATUS:
                 exc = httpx.HTTPStatusError(
-                    f"{response.status_code}",
-                    request=response.request,
-                    response=response,
+                    f"{response.status_code}", request=response.request, response=response
                 )
                 raise _map_http_error(exc) from exc
             response.raise_for_status()
@@ -199,10 +194,7 @@ class RPC:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {**kwargs, "action": "get_my_feed", "nid": self._nid}
         return await self._safe_call(
-            "/class/api/get_my_feed",
-            payload,
-            error_cls=FeedError,
-            error_msg="Failed to get feed",
+            "/class/api/get_my_feed", payload, error_cls=FeedError, error_msg="Failed to get feed"
         )
 
     async def content_create(self, **kwargs: Any) -> dict[str, Any]:
@@ -245,10 +237,7 @@ class RPC:
         """Get users in the network."""
         payload = {"action": "get_users", "nid": self._nid}
         return await self._safe_call(
-            "/class/api/get_users",
-            payload,
-            error_cls=UserError,
-            error_msg="Failed to get users",
+            "/class/api/get_users", payload, error_cls=UserError, error_msg="Failed to get users"
         )
 
     async def search(self, query: str, **kwargs: Any) -> dict[str, Any]:
@@ -258,10 +247,7 @@ class RPC:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {**kwargs, "action": "search", "nid": self._nid, "query": query}
         return await self._safe_call(
-            "/class/api/search",
-            payload,
-            error_cls=SearchError,
-            error_msg="Failed to search",
+            "/class/api/search", payload, error_cls=SearchError, error_msg="Failed to search"
         )
 
     async def get_stats(self) -> dict[str, Any]:
@@ -373,10 +359,7 @@ class RPC:
         Args:
             post_id: The CID of the post to mark unread.
         """
-        payload = {
-            "method": "content.mark_unread",
-            "params": {"nid": self._nid, "cid": post_id},
-        }
+        payload = {"method": "content.mark_unread", "params": {"nid": self._nid, "cid": post_id}}
         return await self._safe_call(
             "/logic/api",
             payload,
@@ -467,10 +450,7 @@ class RPC:
             },
         }
         return await self._safe_call(
-            "/logic/api",
-            payload,
-            error_cls=ContentError,
-            error_msg="Failed to save draft",
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to save draft"
         )
 
     async def content_get_similar(self, post_id: str, **kwargs: Any) -> dict[str, Any]:
@@ -487,11 +467,7 @@ class RPC:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {
             "method": "content.get_similar",
-            "params": {
-                **kwargs,
-                "cid": post_id,
-                "nid": self._nid,
-            },
+            "params": {**kwargs, "cid": post_id, "nid": self._nid},
         }
         return await self._safe_call(
             "/logic/api",

@@ -63,16 +63,14 @@ class ChangeLogEntry(BaseModel):
     model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
     anon: AnonymityLevel = Field(
-        default=AnonymityLevel.NO,
-        description="Anonymity level of the change author",
+        default=AnonymityLevel.NO, description="Anonymity level of the change author"
     )
     uid: str = Field(default="", description="User ID of the person who made the change")
     data: str | None = Field(default=None, description="Free-form data associated with the change")
     to: str | None = Field(default=None, description="Target value after the change, if applicable")
     v: Visibility = Field(default=Visibility.PUBLIC, description="Visibility of the change record")
     type: ChangeType = Field(
-        default=ChangeType.CREATE,
-        description="Type of change (create, update, endorse, etc.)",
+        default=ChangeType.CREATE, description="Type of change (create, update, endorse, etc.)"
     )
     when: datetime | None = Field(default=None, description="Timestamp when the change occurred")
     cid: str = Field(default="", description="Child element ID the change relates to, if any")
@@ -127,12 +125,10 @@ class FollowUp(BaseModel):
         default=None, description="Timestamp when the follow-up was posted"
     )
     updated: datetime | None = Field(
-        default=None,
-        description="Timestamp when the follow-up was last edited",
+        default=None, description="Timestamp when the follow-up was last edited"
     )
     anon: AnonymityLevel = Field(
-        default=AnonymityLevel.NO,
-        description="Anonymity level of the author",
+        default=AnonymityLevel.NO, description="Anonymity level of the author"
     )
 
 
@@ -163,19 +159,14 @@ class Child(BaseModel):
         default=None, description="Timestamp when the child was posted"
     )
     updated: datetime | None = Field(
-        default=None,
-        description="Timestamp when the child was last edited",
+        default=None, description="Timestamp when the child was last edited"
     )
     anon: AnonymityLevel = Field(
-        default=AnonymityLevel.NO,
-        description="Anonymity level of the author",
+        default=AnonymityLevel.NO, description="Anonymity level of the author"
     )
-    no_answer: bool = Field(
-        default=False, description="Whether this follow-up has no answer yet"
-    )
+    no_answer: bool = Field(default=False, description="Whether this follow-up has no answer yet")
     followed: bool = Field(
-        default=False,
-        description="Whether the current user is following this element",
+        default=False, description="Whether the current user is following this element"
     )
 
 
@@ -205,25 +196,17 @@ class Answer(BaseModel):
         default=None, description="Timestamp when the answer was posted"
     )
     updated: datetime | None = Field(
-        default=None,
-        description="Timestamp when the answer was last edited",
+        default=None, description="Timestamp when the answer was last edited"
     )
-    votes: int = Field(
-        default=0, description="Number of votes/endorsements on this answer"
-    )
+    votes: int = Field(default=0, description="Number of votes/endorsements on this answer")
     endorsements: list[Endorsement] = Field(
         default_factory=list, description="List of endorsement records"
     )
     is_instructor_answer: bool = Field(
         default=False, description="Whether the author is an instructor"
     )
-    is_student_answer: bool = Field(
-        default=False, description="Whether the author is a student"
-    )
-    rated: bool = Field(
-        default=False,
-        description="Whether the current user has rated this answer",
-    )
+    is_student_answer: bool = Field(default=False, description="Whether the author is a student")
+    rated: bool = Field(default=False, description="Whether the current user has rated this answer")
     folder: str = Field(default="", description="Folder assignment for this answer")
 
 
@@ -349,37 +332,23 @@ class Post(BaseModel):
     created_at: datetime | None = Field(
         default=None, description="Timestamp when the post was created"
     )
-    updated_at: datetime | None = Field(
-        default=None, description="Timestamp of the last update"
-    )
-    nr: int = Field(
-        default=0, description="Numeric post number within the network"
-    )
+    updated_at: datetime | None = Field(default=None, description="Timestamp of the last update")
+    nr: int = Field(default=0, description="Numeric post number within the network")
     raw: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Raw API response dict for advanced use cases",
+        default_factory=dict, description="Raw API response dict for advanced use cases"
     )
-    tags: list[str] = Field(
-        default_factory=list, description="List of user-defined tags"
-    )
+    tags: list[str] = Field(default_factory=list, description="List of user-defined tags")
     folder: str = Field(default="", description="Folder name the post belongs to")
-    status: PostStatus = Field(
-        default=PostStatus.ACTIVE, description="Post lifecycle status"
-    )
+    status: PostStatus = Field(default=PostStatus.ACTIVE, description="Post lifecycle status")
     views: int = Field(default=0, description="Total view count")
-    unique_views: int | None = Field(
-        default=None, description="Unique viewer count"
-    )
+    unique_views: int | None = Field(default=None, description="Unique viewer count")
     students: list[StudentInfo] = Field(
         default_factory=list, description="Student participant info"
     )
     followups: list[FollowUp] = Field(
-        default_factory=list,
-        description="Follow-up questions/comments on this post",
+        default_factory=list, description="Follow-up questions/comments on this post"
     )
-    answers: list[Answer] = Field(
-        default_factory=list, description="Answer posts on this post"
-    )
+    answers: list[Answer] = Field(default_factory=list, description="Answer posts on this post")
     change_log: list[ChangeLogEntry] = Field(
         default_factory=list, description="Edit history entries"
     )
@@ -387,17 +356,14 @@ class Post(BaseModel):
         default_factory=list, description="Endorsement/upvote records"
     )
     config: PostConfig = Field(
-        default_factory=PostConfig,
-        description="Post configuration (instructor-only, etc.)",
+        default_factory=PostConfig, description="Post configuration (instructor-only, etc.)"
     )
     children: list[Child] = Field(
-        default_factory=list,
-        description="Child items (answers, follow-ups, comments)",
+        default_factory=list, description="Child items (answers, follow-ups, comments)"
     )
     user_name: str = Field(default="", description="Display name of the author")
     visibility: Visibility = Field(
-        default=Visibility.PUBLIC,
-        description="Access level (public, instructors, group)",
+        default=Visibility.PUBLIC, description="Access level (public, instructors, group)"
     )
     revisions: list[PostRevision] = Field(default_factory=list, description="Full revision history")
 

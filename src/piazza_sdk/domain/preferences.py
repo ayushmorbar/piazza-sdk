@@ -18,9 +18,7 @@ if TYPE_CHECKING:
 
 
 async def get_preferences(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
+    rpc: RPC, *, session: SessionStateManager | None = None
 ) -> UserPreferences:
     """Retrieve the current user's preferences for this network.
 
@@ -44,10 +42,7 @@ async def get_preferences(
 
 
 async def update_preferences(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-    prefs: UserPreferences,
+    rpc: RPC, *, session: SessionStateManager | None = None, prefs: UserPreferences
 ) -> None:
     """Update the current user's preferences for this network.
 

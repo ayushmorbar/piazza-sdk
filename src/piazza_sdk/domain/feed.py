@@ -59,10 +59,7 @@ async def get_feed(
 
 
 async def get_similar_posts(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-    post_id: str,
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
 ) -> list[FeedItem]:
     """Get posts similar to the specified post.
 
@@ -92,6 +89,4 @@ async def get_similar_posts(
     except PiazzaSDKError:
         raise
     except Exception as exc:
-        raise FeedError(
-            f"Failed to get similar posts for {post_id}: {exc}"
-        ) from exc
+        raise FeedError(f"Failed to get similar posts for {post_id}: {exc}") from exc

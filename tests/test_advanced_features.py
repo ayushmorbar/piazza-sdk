@@ -627,9 +627,7 @@ class TestPublishingOptions:
 
 class TestHallOfFameItem:
     def test_alias_mapping(self) -> None:
-        item = HallOfFameItem(
-            uid="u123", nr=42, time=120, text="Great answer", when=1700000000
-        )
+        item = HallOfFameItem(uid="u123", nr=42, time=120, text="Great answer", when=1700000000)
         assert item.votes == 42
         assert item.response_time_seconds == 120
         assert item.snippet == "Great answer"
@@ -638,17 +636,14 @@ class TestHallOfFameItem:
 
     def test_pythonic_names(self) -> None:
         item = HallOfFameItem(
-            uid="u1", votes=5, response_time_seconds=10,
-            snippet="Hi", timestamp=999,
+            uid="u1", votes=5, response_time_seconds=10, snippet="Hi", timestamp=999
         )
         assert item.votes == 5
         assert item.uid == "u1"
 
     def test_extra_fields_rejected(self) -> None:
         with pytest.raises(PydanticValidationError, match="Extra inputs are not permitted"):
-            HallOfFameItem(
-                uid="u1", nr=1, time=2, text="t", when=3, unknown_field="ignored"
-            )
+            HallOfFameItem(uid="u1", nr=1, time=2, text="t", when=3, unknown_field="ignored")
 
     def test_all_optional(self) -> None:
         item = HallOfFameItem()
@@ -666,15 +661,17 @@ class TestGetHallOfFame:
     @pytest.mark.asyncio
     async def test_returns_items(self) -> None:
         net = _make_network()
-        net._rpc.get_my_feed = AsyncMock(return_value={
-            "result": {
-                "hof": {
-                    "best_answer": [
-                        {"uid": "u1", "nr": 10, "time": 30, "text": "Good answer", "when": 999},
-                    ]
+        net._rpc.get_my_feed = AsyncMock(
+            return_value={
+                "result": {
+                    "hof": {
+                        "best_answer": [
+                            {"uid": "u1", "nr": 10, "time": 30, "text": "Good answer", "when": 999}
+                        ]
+                    }
                 }
             }
-        })
+        )
         items = await net.get_hall_of_fame()
         assert len(items) == 1
         assert items[0].uid == "u1"
@@ -843,9 +840,7 @@ class TestSaveDraft:
     @pytest.mark.asyncio
     async def test_returns_draft_id(self) -> None:
         net = _make_network()
-        net._rpc.content_save_draft = AsyncMock(
-            return_value={"id": "draft_1", "status": "saved"}
-        )
+        net._rpc.content_save_draft = AsyncMock(return_value={"id": "draft_1", "status": "saved"})
         result = await net.save_draft("My Title", "<p>Content here</p>")
         assert result == "draft_1"
         net._rpc.content_save_draft.assert_awaited_once_with(
@@ -946,9 +941,7 @@ class TestUploadAsset:
     @pytest.mark.asyncio
     async def test_rpc_error_passthrough(self) -> None:
         net = _make_network()
-        net._rpc.asset_get_upload_url = AsyncMock(
-            side_effect=UploadError("rpc failed")
-        )
+        net._rpc.asset_get_upload_url = AsyncMock(side_effect=UploadError("rpc failed"))
         with pytest.raises(UploadError, match="rpc failed"):
             await net.upload_asset("file.pdf", b"data")
 

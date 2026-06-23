@@ -120,19 +120,13 @@ class CookieJar(BaseModel):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 # Atomic write: create with restrictive permissions (0o600)
                 # to prevent TOCTOU race condition between write and chmod.
-                fd = os.open(
-                    str(path),
-                    os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-                    0o600,
-                )
+                fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
                 try:
                     os.write(fd, payload.encode())
                 finally:
                     os.close(fd)
             except OSError as exc:
-                raise PiazzaSDKError(
-                    f"Failed to write cookie file {path}: {exc}"
-                ) from exc
+                raise PiazzaSDKError(f"Failed to write cookie file {path}: {exc}") from exc
 
         await asyncio.to_thread(_write_sync)
         logger.debug("Cookies saved to %s (encrypted=%s)", path, bool(self.encryption_key))
@@ -160,9 +154,7 @@ class CookieJar(BaseModel):
             except FileNotFoundError:
                 return None
             except OSError as exc:
-                raise PiazzaSDKError(
-                    f"Failed to read cookie file {path}: {exc}"
-                ) from exc
+                raise PiazzaSDKError(f"Failed to read cookie file {path}: {exc}") from exc
 
         text = await asyncio.to_thread(_read_sync)
         if text is None:

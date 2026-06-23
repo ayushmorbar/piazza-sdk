@@ -17,11 +17,7 @@ if TYPE_CHECKING:
     from piazza_sdk.auth import SessionStateManager
 
 
-async def get_statistics(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-) -> Statistics:
+async def get_statistics(rpc: RPC, *, session: SessionStateManager | None = None) -> Statistics:
     """Get network statistics.
 
     Args:

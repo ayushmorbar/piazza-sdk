@@ -77,9 +77,7 @@ class Piazza:
             await self._session.refresh()
         try:
             raw = await self._get_user_rpc()._safe_call(
-                "/user/api/get_user_classes",
-                {},
-                error_msg="Failed to get user classes",
+                "/user/api/get_user_classes", {}, error_msg="Failed to get user classes"
             )
             return raw.get("result", []) if isinstance(raw, dict) else []  # type: ignore[no-any-return]
         except PiazzaSDKError:
@@ -99,9 +97,7 @@ class Piazza:
             await self._session.refresh()
         try:
             return await self._get_user_rpc()._safe_call(
-                "/user/api/get_user_profile",
-                {},
-                error_msg="Failed to get user profile",
+                "/user/api/get_user_profile", {}, error_msg="Failed to get user profile"
             )
         except PiazzaSDKError:
             raise

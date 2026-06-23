@@ -308,10 +308,7 @@ class Network:
         """
         await self._ensure_session()
         await _domain_answer_post(
-            self._rpc,
-            post_id=post_id,
-            content=content,
-            instructor_answer=instructor_answer,
+            self._rpc, post_id=post_id, content=content, instructor_answer=instructor_answer
         )
 
     async def endorse_post(self, post_id: str, as_instructor_badge: bool = False) -> Post:
@@ -331,11 +328,7 @@ class Network:
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
         await self._ensure_session()
-        await _domain_endorse(
-            self._rpc,
-            post_id=post_id,
-            as_instructor_badge=as_instructor_badge,
-        )
+        await _domain_endorse(self._rpc, post_id=post_id, as_instructor_badge=as_instructor_badge)
         return await self.get_post(post_id)
 
     async def add_tag(self, post_id: str, tag: str) -> None:
@@ -462,11 +455,7 @@ class Network:
         """
         await self._ensure_session()
         return await _domain_save_draft(
-            self._rpc,
-            subject=subject,
-            content=content,
-            post_type=post_type,
-            **kwargs,
+            self._rpc, subject=subject, content=content, post_type=post_type, **kwargs
         )
 
     async def upload_asset(
@@ -491,10 +480,7 @@ class Network:
         """
         await self._ensure_session()
         return await _domain_upload_asset(
-            self._rpc,
-            filename=filename,
-            file_data=file_data,
-            content_type=content_type,
+            self._rpc, filename=filename, file_data=file_data, content_type=content_type
         )
 
     # ── Users ─────────────────────────────────────────────────────────

@@ -18,11 +18,7 @@ if TYPE_CHECKING:
 
 
 async def search(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-    query: str,
-    **kwargs: Any,
+    rpc: RPC, *, session: SessionStateManager | None = None, query: str, **kwargs: Any
 ) -> Feed:
     """Search posts by query string.
 

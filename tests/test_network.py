@@ -447,7 +447,9 @@ class TestUploadAsset:
         net = _make_network()
         file_data = b"\x89PNG\r\n"
         with patch("piazza_sdk.api.network._domain_upload_asset") as mock:
-            mock.return_value = AssetUploadResponse(id="asset_1", url="https://example.com/file.png")
+            mock.return_value = AssetUploadResponse(
+                id="asset_1", url="https://example.com/file.png"
+            )
             result = await net.upload_asset("photo.png", file_data)
         assert result.id == "asset_1"
         mock.assert_awaited_once_with(
@@ -547,11 +549,7 @@ class TestGetHallOfFame:
         net._rpc.get_my_feed = AsyncMock(
             return_value={
                 "result": {
-                    "hof": {
-                        "best_answer": [
-                            {"uid": "u1", "nr": 10, "text": "Great answer"}
-                        ]
-                    }
+                    "hof": {"best_answer": [{"uid": "u1", "nr": 10, "text": "Great answer"}]}
                 }
             }
         )
@@ -576,9 +574,7 @@ class TestGetHallOfFame:
     @pytest.mark.asyncio
     async def test_empty_best_answer_returns_empty(self) -> None:
         net = _make_network()
-        net._rpc.get_my_feed = AsyncMock(
-            return_value={"result": {"hof": {"best_answer": []}}}
-        )
+        net._rpc.get_my_feed = AsyncMock(return_value={"result": {"hof": {"best_answer": []}}})
         result = await net.get_hall_of_fame()
         assert result == []
 

@@ -59,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
 
@@ -97,10 +97,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tools
-        run: pip install build
+        run: uv pip install --system build
 
       - name: Build sdist and wheel
-        run: python -m build
+        run: uv build
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

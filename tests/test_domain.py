@@ -25,16 +25,18 @@ def _make_rpc() -> MagicMock:
 class TestGetStatistics:
     async def test_happy_path_returns_statistics(self) -> None:
         rpc = _make_rpc()
-        rpc.get_stats = AsyncMock(return_value={
-            "posts": 150,
-            "resolved": 80,
-            "unresolved": 70,
-            "users": 200,
-            "instructors": 5,
-            "students": 195,
-            "total_views": 10000,
-            "total_endorsements": 300,
-        })
+        rpc.get_stats = AsyncMock(
+            return_value={
+                "posts": 150,
+                "resolved": 80,
+                "unresolved": 70,
+                "users": 200,
+                "instructors": 5,
+                "students": 195,
+                "total_views": 10000,
+                "total_endorsements": 300,
+            }
+        )
         result = await get_statistics(rpc)
         assert isinstance(result, Statistics)
         assert result.posts == 150
@@ -75,19 +77,15 @@ class TestGetStatistics:
 class TestSearch:
     async def test_happy_path_returns_feed(self) -> None:
         rpc = _make_rpc()
-        rpc.search = AsyncMock(return_value={
-            "feed": [
-                {
-                    "id": "post_1",
-                    "subject": "How to solve integrals?",
-                },
-                {
-                    "id": "post_2",
-                    "subject": "Derivative rules",
-                },
-            ],
-            "total": 2,
-        })
+        rpc.search = AsyncMock(
+            return_value={
+                "feed": [
+                    {"id": "post_1", "subject": "How to solve integrals?"},
+                    {"id": "post_2", "subject": "Derivative rules"},
+                ],
+                "total": 2,
+            }
+        )
         result = await search(rpc, query="calculus")
         assert isinstance(result, Feed)
         assert len(result.feed) == 2

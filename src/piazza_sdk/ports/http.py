@@ -22,12 +22,7 @@ class HTTPClientProtocol(Protocol):
     clients) can satisfy the contract.
     """
 
-    async def request(
-        self,
-        method: str,
-        url: str,
-        **kwargs: Any,
-    ) -> httpx.Response:
+    async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Send an HTTP request.
 
         Args:
@@ -71,12 +66,7 @@ class RPCProtocol(Protocol):
         """Piazza network (course) identifier sent with every request."""
         ...
 
-    async def _request(
-        self,
-        method: str,
-        endpoint: str,
-        **kwargs: Any,
-    ) -> Any:
+    async def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
         """Make an HTTP request with retry and error handling.
 
         Args:

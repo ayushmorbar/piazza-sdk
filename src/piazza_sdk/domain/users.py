@@ -17,11 +17,7 @@ if TYPE_CHECKING:
     from piazza_sdk.auth import SessionStateManager
 
 
-async def get_all_users(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-) -> list[User]:
+async def get_all_users(rpc: RPC, *, session: SessionStateManager | None = None) -> list[User]:
     """Get all users in the network.
 
     Args:
@@ -36,9 +32,7 @@ async def get_all_users(
     """
     try:
         raw = await rpc.get_users()
-        users_raw: list[dict[str, Any]] = (
-            raw.get("users", []) if isinstance(raw, dict) else []
-        )
+        users_raw: list[dict[str, Any]] = raw.get("users", []) if isinstance(raw, dict) else []
         return [User.model_validate(u, extra="ignore") for u in users_raw]
     except PiazzaSDKError:
         raise
@@ -47,9 +41,7 @@ async def get_all_users(
 
 
 async def get_instructor_stats(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
+    rpc: RPC, *, session: SessionStateManager | None = None
 ) -> dict[str, Any]:
     """Get instructor-specific statistics for this network.
 
@@ -72,11 +64,7 @@ async def get_instructor_stats(
         raise ContentError(f"Failed to get instructor stats: {exc}") from exc
 
 
-async def get_online_users(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-) -> list[User]:
+async def get_online_users(rpc: RPC, *, session: SessionStateManager | None = None) -> list[User]:
     """Get currently online users in the network.
 
     Args:

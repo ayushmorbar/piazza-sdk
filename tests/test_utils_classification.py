@@ -33,11 +33,7 @@ def _make_feed_item(
     }
     defaults.update(kwargs)
     return FeedItem(
-        created=created,
-        updated=updated,
-        no_answer=no_answer,
-        reputation=reputation,
-        **defaults,
+        created=created, updated=updated, no_answer=no_answer, reputation=reputation, **defaults
     )
 
 

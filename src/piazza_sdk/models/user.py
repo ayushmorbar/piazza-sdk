@@ -77,8 +77,7 @@ class UserPreferences(BaseModel):
     model_config = ConfigDict(slots=True, populate_by_name=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
     digest_frequency: str = Field(
-        default="daily",
-        description="Email digest frequency (real_time, daily, weekly, never)",
+        default="daily", description="Email digest frequency (real_time, daily, weekly, never)"
     )
     digest_hour: int = Field(
         default=9, ge=0, le=23, description="Hour of day (0-23) to send digest emails"

@@ -229,11 +229,7 @@ class TestDetectImageType:
         assert detect_image_type(data) == "image/svg+xml"
 
     def test_real_png_header(self):
-        data = (
-            b"\x89PNG\r\n\x1a\n"
-            b"\x00\x00\x00\rIHDR"
-            + b"\x00" * 20
-        )
+        data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 20
         assert detect_image_type(data) == "image/png"
 
     def test_real_jpeg_header(self):

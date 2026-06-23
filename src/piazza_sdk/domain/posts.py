@@ -50,7 +50,7 @@ async def create_post(  # noqa: PLR0913
     anonymous: bool = False,
     options: PublishingOptions | None = None,
     **kwargs: Any,
-    ) -> PostCreatedResponse:
+) -> PostCreatedResponse:
     """Create a new post.
 
     Args:
@@ -92,7 +92,7 @@ async def add_followup(  # noqa: PLR0913
     anonymous: bool = False,
     options: PublishingOptions | None = None,
     **kwargs: Any,
-    ) -> PostCreatedResponse:
+) -> PostCreatedResponse:
     """Add a follow-up to an existing post.
 
     Args:
@@ -115,9 +115,7 @@ async def add_followup(  # noqa: PLR0913
     extra = dict(kwargs)
     if options is not None:
         extra.update(options.to_kwargs())
-    raw = await rpc.content_create(
-        cid=post_id, content=content, anonymous=anonymous, **extra
-    )
+    raw = await rpc.content_create(cid=post_id, content=content, anonymous=anonymous, **extra)
     result = raw.get("result", raw)
     return PostCreatedResponse.model_validate(result)
 
@@ -194,10 +192,7 @@ async def endorse(
 
 
 async def delete_post(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-    post_id: str,
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
 ) -> bool:
     """Delete a post.
 
@@ -226,11 +221,7 @@ async def delete_post(
 
 
 async def add_tag(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-    post_id: str,
-    tag: str,
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str, tag: str
 ) -> None:
     """Add a tag to a post.
 
@@ -258,11 +249,7 @@ async def add_tag(
 
 
 async def remove_tag(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-    post_id: str,
-    tag: str,
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str, tag: str
 ) -> None:
     """Remove a tag from a post.
 
@@ -290,10 +277,7 @@ async def remove_tag(
 
 
 async def resolve_post(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-    post_id: str,
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
 ) -> bool:
     """Mark a post as resolved.
 
@@ -315,10 +299,7 @@ async def resolve_post(
 
 
 async def mark_as_unread(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-    post_id: str,
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
 ) -> bool:
     """Mark a post as unread for the current user.
 
@@ -346,10 +327,7 @@ async def mark_as_unread(
 
 
 async def create_folder(
-    rpc: RPC,
-    *,
-    session: SessionStateManager | None = None,
-    folder_name: str,
+    rpc: RPC, *, session: SessionStateManager | None = None, folder_name: str
 ) -> list[str]:
     """Create a new folder in the network.
 
@@ -413,9 +391,7 @@ async def save_draft(
         )
         draft_id = result.get("id")
         if not isinstance(draft_id, str) or not draft_id:
-            raise ContentError(
-                "Piazza backend accepted the draft but failed to return an ID."
-            )
+            raise ContentError("Piazza backend accepted the draft but failed to return an ID.")
         return draft_id
     except (ContentError, PiazzaSDKError):
         raise
@@ -462,23 +438,18 @@ async def upload_asset(
         parsed = urlparse(upload_url)
         allowed_upload_hosts = {"s3.amazonaws.com", "piazza.com"}
         if parsed.hostname and not any(
-            parsed.hostname == h or parsed.hostname.endswith("." + h)
-            for h in allowed_upload_hosts
+            parsed.hostname == h or parsed.hostname.endswith("." + h) for h in allowed_upload_hosts
         ):
             raise ValidationError(
-                f"upload URL host '{parsed.hostname}' not in allowed list: "
-                f"{allowed_upload_hosts}"
+                f"upload URL host '{parsed.hostname}' not in allowed list: {allowed_upload_hosts}"
             )
         http_client = rpc._client
         response = await http_client.put(
-            upload_url,
-            content=file_data,
-            headers={"Content-Type": content_type},
+            upload_url, content=file_data, headers={"Content-Type": content_type}
         )
         response.raise_for_status()
         return AssetUploadResponse(
-            id=url_data.get("id", ""),
-            url=url_data.get("url") or url_data.get("upload_url"),
+            id=url_data.get("id", ""), url=url_data.get("url") or url_data.get("upload_url")
         )
     except (UploadError, PiazzaSDKError):
         raise

@@ -156,9 +156,7 @@ class SessionStateManager:
             ) from exc
         except TimeoutError as exc:
             self._state = SessionState.UNAUTHENTICATED
-            raise AuthenticationError(
-                f"Login request timed out: {exc}"
-            ) from exc
+            raise AuthenticationError(f"Login request timed out: {exc}") from exc
         except httpx.RequestError as exc:
             self._state = SessionState.UNAUTHENTICATED
             raise AuthenticationError(f"Network error during login: {exc}") from exc

@@ -198,13 +198,25 @@ class TestNetworkEndorsePost:
     async def test_calls_rpc(self) -> None:
         net = _make_network()
         net._rpc.content_upvote = AsyncMock()
-        net._rpc.content_get = AsyncMock(return_value={
-            "id": "post_1", "type": "question", "title": "t",
-            "subject": "s", "author": "a", "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z", "nr": 0, "raw": {},
-            "tags": [], "folder": "f", "views": 0,
-            "config": {}, "children": [], "user_name": "u",
-        })
+        net._rpc.content_get = AsyncMock(
+            return_value={
+                "id": "post_1",
+                "type": "question",
+                "title": "t",
+                "subject": "s",
+                "author": "a",
+                "created_at": "2024-01-01T00:00:00Z",
+                "updated_at": "2024-01-01T00:00:00Z",
+                "nr": 0,
+                "raw": {},
+                "tags": [],
+                "folder": "f",
+                "views": 0,
+                "config": {},
+                "children": [],
+                "user_name": "u",
+            }
+        )
         result = await net.endorse_post("post_1")
         net._rpc.content_upvote.assert_called_once_with("post_1")
         assert result.id == "post_1"

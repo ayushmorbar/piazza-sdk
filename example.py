@@ -5,7 +5,7 @@ Demonstrates the modern async API with Pydantic dot-notation access.
 
 import asyncio
 
-from piazza_sdk import Piazza, SessionConfig, SessionState
+from piazza_sdk import Piazza, SessionConfig, SessionStateManager
 
 
 async def main():
@@ -22,7 +22,7 @@ async def main():
 
     try:
         # Create session
-        async with SessionState(config) as session:
+        async with SessionStateManager(config) as session:
             # Login
             print("Logging in...")
             await session.login(email="your_email@example.com", password="your_password")

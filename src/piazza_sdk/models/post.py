@@ -284,8 +284,8 @@ class PublishingOptions(BaseModel):
     def to_kwargs(self) -> dict[str, Any]:
         """Convert to kwargs for RPC calls."""
         return {
-            "options[bypass_email]": self.bypass_email,
-            "options[no_up_notify]": self.silent_update,
+            "options[bypass_email]": int(self.bypass_email),
+            "options[no_up_notify]": int(self.silent_update),
             "options[anonymous]": self.anonymity,
         }
 

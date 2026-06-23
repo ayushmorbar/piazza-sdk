@@ -80,7 +80,9 @@ class UserPreferences(BaseModel):
         default="daily",
         description="Email digest frequency (real_time, daily, weekly, never)",
     )
-    digest_hour: int = Field(default=9, description="Hour of day (0-23) to send digest emails")
+    digest_hour: int = Field(
+        default=9, ge=0, le=23, description="Hour of day (0-23) to send digest emails"
+    )
     email_new_post: bool = Field(default=True, description="Email on new posts")
     email_new_followup: bool = Field(default=True, description="Email on new follow-ups")
     email_new_answer: bool = Field(default=True, description="Email on new answers")

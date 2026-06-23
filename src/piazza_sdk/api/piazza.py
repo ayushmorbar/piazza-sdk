@@ -42,6 +42,7 @@ class Piazza:
                 client=self._session.client,
                 base_url=self._session.config.base_url,
                 network_id="",
+                on_auth_error=self._session._rpc_refresh,
             )
         return self._user_rpc
 
@@ -56,7 +57,10 @@ class Piazza:
         """
         if nid not in self._networks:
             rpc = RPC(
-                client=self._session.client, base_url=self._session.config.base_url, network_id=nid
+                client=self._session.client,
+                base_url=self._session.config.base_url,
+                network_id=nid,
+                on_auth_error=self._session._rpc_refresh,
             )
             self._networks[nid] = Network(rpc, nid, session=self._session)
         return self._networks[nid]

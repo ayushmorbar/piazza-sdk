@@ -8,10 +8,13 @@ from __future__ import annotations
 import html as html_module
 import re
 
+_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.DOTALL | re.IGNORECASE)
+
 
 def _basic_html_to_markdown(html: str) -> str:
     """Basic HTML to Markdown converter (fallback when html2text unavailable)."""
-    text = html
+    # Strip <script> and <style> content before conversion
+    text = _SCRIPT_STYLE_RE.sub("", html)
 
     # Handle common HTML entities
     text = html_module.unescape(text)
@@ -85,7 +88,8 @@ def html_to_markdown(html: str) -> str:
         converter.ignore_links = False
         converter.ignore_images = False
         converter.body_width = 0
-        result: str = converter.handle(html)
+        clean = _SCRIPT_STYLE_RE.sub("", html)
+        result: str = converter.handle(clean)
         return result.strip()
     except ImportError:
         return _basic_html_to_markdown(html)

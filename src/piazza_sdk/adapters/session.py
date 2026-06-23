@@ -147,25 +147,7 @@ class SessionStateManager:
                 follow_redirects=True,
             )
 
-            if response.status_code == 200:
-                self._state = SessionState.AUTHENTICATED
-                self._login_time = time.time()
-                logger.info("Login successful for course %s", self.config.course_id)
-
-                # Persist CSRF token on client headers for future RPC calls
-                assert self._client is not None  # noqa: S101 - guaranteed non-None after login
-                self._client.headers["x-csrf-token"] = csrf_token
-
-                # Sync httpx cookies into our CookieJar before persisting
-                for name, value in self._client.cookies.items():
-                    self._cookies.set(name, value)
-
-                # Persist cookies if path configured
-                if self._cookie_path is not None:
-                    await self._cookies.save(self._cookie_path)
-            else:
-                self._state = SessionState.UNAUTHENTICATED
-                raise AuthenticationError(f"Login failed with status {response.status_code}")
+            await self._finish_login(response, csrf_token)
 
         except httpx.HTTPStatusError as exc:
             self._state = SessionState.UNAUTHENTICATED
@@ -180,6 +162,37 @@ class SessionStateManager:
         except httpx.RequestError as exc:
             self._state = SessionState.UNAUTHENTICATED
             raise AuthenticationError(f"Network error during login: {exc}") from exc
+
+    async def _finish_login(self, response: httpx.Response, csrf_token: str) -> None:
+        """Validate login response and persist session state."""
+        if response.status_code != 200:
+            self._state = SessionState.UNAUTHENTICATED
+            raise AuthenticationError(f"Login failed with status {response.status_code}")
+
+        # Sync httpx cookies into our CookieJar before persisting
+        assert self._client is not None  # noqa: S101 - guaranteed non-None after login
+        for name, value in self._client.cookies.items():
+            self._cookies.set(name, value)
+
+        # Verify session cookies actually exist (Issue 5)
+        if not self._cookies.cookies:
+            self._state = SessionState.UNAUTHENTICATED
+            raise AuthenticationError(
+                "Login returned 200 but no session cookies were set. "
+                "The server may have changed its authentication flow."
+            )
+
+        self._state = SessionState.AUTHENTICATED
+        self._login_time = time.time()
+        logger.info("Login successful for course %s", self.config.course_id)
+
+        # Persist CSRF token on client headers for future RPC calls
+        assert self._client is not None  # noqa: S101 - guaranteed non-None after login
+        self._client.headers["x-csrf-token"] = csrf_token
+
+        # Persist cookies if path configured
+        if self._cookie_path is not None:
+            await self._cookies.save(self._cookie_path)
 
     async def refresh(self, email: str | None = None, password: str | None = None) -> None:
         """Refresh an expired session by re-authenticating.
@@ -213,6 +226,19 @@ class SessionStateManager:
 
         await self.login(email, password)
         logger.info("Session refreshed for course %s", self.config.course_id)
+
+    async def _rpc_refresh(self) -> None:
+        """Refresh callback invoked by RPC on HTTP 401 (Issue 6).
+
+        Re-authenticates using stored credentials and re-applies cookies
+        to the active httpx client.
+        """
+        await self.refresh()
+        # Re-apply refreshed cookies to the live httpx client so the
+        # retried RPC request carries the new session cookies.
+        if self._client is not None:
+            for name, value in self._cookies.cookies.items():
+                self._client.cookies.set(name, value)
 
     async def restore_cookies(self) -> bool:
         """Restore cookies from disk if a cookie path is configured.

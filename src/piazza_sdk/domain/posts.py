@@ -462,7 +462,8 @@ async def upload_asset(
         parsed = urlparse(upload_url)
         allowed_upload_hosts = {"s3.amazonaws.com", "piazza.com"}
         if parsed.hostname and not any(
-            parsed.hostname.endswith(h) for h in allowed_upload_hosts
+            parsed.hostname == h or parsed.hostname.endswith("." + h)
+            for h in allowed_upload_hosts
         ):
             raise ValidationError(
                 f"upload URL host '{parsed.hostname}' not in allowed list: "

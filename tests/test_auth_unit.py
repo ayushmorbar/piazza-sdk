@@ -8,7 +8,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from piazza_sdk.auth import CookieJar, SessionConfig, SessionState, SessionStateManager
-from piazza_sdk.exceptions import AuthenticationError, SessionClosedError
+from piazza_sdk.exceptions import AuthenticationError, PiazzaSDKError, SessionClosedError
 
 
 class TestSessionState:
@@ -156,16 +156,15 @@ class TestCookieJarEncryption:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_load_plaintext_file_with_key_falls_back(self, tmp_path, fernet_key):
-        """A plaintext file loaded with a key should fall back to plaintext."""
+    async def test_load_plaintext_file_with_key_fails(self, tmp_path, fernet_key):
+        """A plaintext file loaded with a key should raise, not silently fall back."""
         path = tmp_path / "plain.json"
         original = CookieJar(cookies={"a": "b"})
         await original.save(path)
 
         loaded = CookieJar(cookies={}, encryption_key=fernet_key)
-        result = await loaded.load(path)
-        assert result is True
-        assert loaded.cookies == {"a": "b"}
+        with pytest.raises(PiazzaSDKError, match="could not be decrypted"):
+            await loaded.load(path)
 
     def test_encryption_key_excluded_from_dump(self, fernet_key):
         jar = CookieJar(cookies={"x": "y"}, encryption_key=fernet_key)

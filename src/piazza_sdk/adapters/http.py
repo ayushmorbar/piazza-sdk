@@ -34,10 +34,16 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from piazza_sdk.models.enums import PostType
 
 # Keys that must never be overridden by caller-supplied kwargs.
 _BLOCKED_KEYS = frozenset({"action", "method", "nid", "params"})
+
+
+class _AuthRetryNeededError(Exception):
+    """Raised inside _request to trigger a single retry after a token refresh."""
 
 
 def _map_http_error(exc: httpx.HTTPStatusError) -> PiazzaSDKError:
@@ -70,19 +76,37 @@ class RPC:
     response parsing.
     """
 
-    def __init__(self, client: httpx.AsyncClient, base_url: str, network_id: str) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str,
+        network_id: str,
+        *,
+        on_auth_error: Callable[[], Any] | None = None,
+    ) -> None:
         self._client = client
         self._base_url = base_url.rstrip("/")
         self._nid = network_id
+        self._on_auth_error = on_auth_error
+
+    _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
     @retry(
-        retry=retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError)),
+        retry=retry_if_exception_type(
+            (httpx.TimeoutException, httpx.ConnectError, _AuthRetryNeededError)
+        ),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
     )
     async def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
-        """Make an HTTP request with retry and error handling."""
+        """Make an HTTP request with retry and error handling.
+
+        Retries on:
+        - Connection and timeout errors (3 attempts)
+        - HTTP 429 / 5xx status codes (mapped to retryable SDK exceptions)
+        - HTTP 401 after a single session-refresh attempt
+        """
         url = f"{self._base_url}/{endpoint.lstrip('/')}"
         logger.debug("RPC %s %s", method, url)
         try:
@@ -94,9 +118,21 @@ class RPC:
                 response.status_code,
                 response.elapsed.total_seconds() * 1000,
             )
+            # Let tenacity retry on transient server errors
+            if response.status_code in self._RETRYABLE_STATUS:
+                exc = httpx.HTTPStatusError(
+                    f"{response.status_code}",
+                    request=response.request,
+                    response=response,
+                )
+                raise _map_http_error(exc) from exc
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 401 and self._on_auth_error is not None:
+                logger.info("RPC %s %s 401 – refreshing session", method, url)
+                await self._on_auth_error()
+                raise _AuthRetryNeededError(method, url) from exc
             logger.warning("RPC %s %s failed: %d", method, url, exc.response.status_code)
             raise _map_http_error(exc) from exc
         except httpx.TimeoutException as exc:

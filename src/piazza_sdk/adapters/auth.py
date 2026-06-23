@@ -174,10 +174,11 @@ class CookieJar(BaseModel):
             try:
                 text = self._decrypt(text)
             except InvalidToken:
-                logger.warning(
-                    "Cookie file %s is not encrypted; loading as plaintext. "
-                    "Set PIAZZA_ENCRYPTION_KEY to enable encryption.",
-                    path,
+                raise PiazzaSDKError(
+                    f"Cookie file {path} could not be decrypted. "
+                    "This may indicate the file was tampered with or the "
+                    "encryption key has changed. Delete the cookie file and "
+                    "re-authenticate."
                 )
 
         try:

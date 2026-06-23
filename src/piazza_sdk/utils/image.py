@@ -21,7 +21,11 @@ def is_image_url(url: str) -> bool:
         return False
     image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp", ".ico"}
     try:
-        parsed = urlparse(url)
+        # Handle protocol-relative URLs (//example.com/image.jpg)
+        normalized = url if url.startswith(("http://", "https://", "//")) else f"https://{url}"
+        if normalized.startswith("//"):
+            normalized = f"https:{normalized}"
+        parsed = urlparse(normalized)
         path = parsed.path.lower()
         return any(path.endswith(ext) for ext in image_extensions)
     except (ValueError, TypeError):

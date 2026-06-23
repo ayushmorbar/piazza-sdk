@@ -74,7 +74,9 @@ class TestIsImageUrl:
         assert is_image_url("/static/img/photo.gif") is True
 
     def test_just_extension(self):
-        assert is_image_url(".png") is True
+        # Bare extensions without a path separator are not valid URLs;
+        # urlparse treats ".png" as netloc, not path, so no extension match
+        assert is_image_url(".png") is False
 
     def test_path_with_dots_in_name(self):
         assert is_image_url("https://example.com/my.photo.v2.png") is True

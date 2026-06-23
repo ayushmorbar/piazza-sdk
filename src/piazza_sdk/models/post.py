@@ -402,6 +402,100 @@ class Post(BaseModel):
         """The first instructor answer child, if any."""
         return next((c for c in self.children if c.type == "i_answer"), None)
 
+    def normalized(self) -> Post:
+        """Return a new Post with HTML content normalized to Markdown.
+
+        Performs on-demand normalization of all text content fields:
+        ``title``, ``subject``, and content within ``children``,
+        ``answers``, and ``followups``.
+
+        The original Post instance is unchanged; the method returns a
+        new instance with normalized strings.
+
+        Returns:
+            New Post instance with Markdown-normalized content.
+        """
+        from piazza_sdk.utils.normalization import normalize_content  # noqa: PLC0415
+
+        def _norm(s: str) -> str:
+            return normalize_content(s) if s else s
+
+        return Post(
+            id=self.id,
+            type=self.type,
+            title=_norm(self.title),
+            subject=_norm(self.subject),
+            author=self.author,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+            nr=self.nr,
+            raw=self.raw,
+            tags=self.tags,
+            folder=self.folder,
+            status=self.status,
+            views=self.views,
+            unique_views=self.unique_views,
+            students=self.students,
+            followups=[
+                FollowUp(
+                    id=f.id,
+                    uid=f.uid,
+                    subject=_norm(f.subject),
+                    content=_norm(f.content),
+                    created=f.created,
+                    updated=f.updated,
+                    anon=f.anon,
+                )
+                for f in self.followups
+            ],
+            answers=[
+                Answer(
+                    id=a.id,
+                    uid=a.uid,
+                    content=_norm(a.content),
+                    created=a.created,
+                    updated=a.updated,
+                    votes=a.votes,
+                    endorsements=a.endorsements,
+                    is_instructor_answer=a.is_instructor_answer,
+                    is_student_answer=a.is_student_answer,
+                    rated=a.rated,
+                    folder=a.folder,
+                )
+                for a in self.answers
+            ],
+            change_log=self.change_log,
+            endorsements=self.endorsements,
+            config=self.config,
+            children=[
+                Child(
+                    id=c.id,
+                    type=c.type,
+                    subject=_norm(c.subject),
+                    content=_norm(c.content),
+                    uid=c.uid,
+                    created=c.created,
+                    updated=c.updated,
+                    anon=c.anon,
+                    no_answer=c.no_answer,
+                    followed=c.followed,
+                )
+                for c in self.children
+            ],
+            user_name=self.user_name,
+            visibility=self.visibility,
+            revisions=[
+                PostRevision(
+                    revision=r.revision,
+                    subject=_norm(r.subject),
+                    content=_norm(r.content),
+                    uid=r.uid,
+                    created=r.created,
+                )
+                for r in self.revisions
+            ],
+        )
+
 
 class PostCreatedResponse(BaseModel):
     """Response from creating a new post or follow-up.

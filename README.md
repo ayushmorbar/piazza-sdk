@@ -65,12 +65,12 @@ if __name__ == "__main__":
 
 ### Core Classes
 
-| Class           | Description                                  |
-| --------------- | -------------------------------------------- |
-| `Piazza`        | Entry point — user profile, classes          |
-| `Network`       | Per-class operations — feed, posts, users    |
-| `SessionConfig` | Configuration (course ID, timeouts, retries) |
-| `PiazzaSession` | Async context manager — session lifecycle        |
+| Class                | Description                                  |
+| -------------------- | -------------------------------------------- |
+| `Piazza`             | Entry point — user profile, classes          |
+| `Network`            | Per-class operations — feed, posts, users    |
+| `SessionConfig`      | Configuration (course ID, timeouts, retries) |
+| `SessionStateManager`| Async context manager — session lifecycle    |
 
 ### Models
 
@@ -84,6 +84,10 @@ post.type        # PostType
 post.created     # datetime
 post.user_name   # str
 post.tags        # list[str]
+
+# On-demand HTML-to-Markdown normalization
+normalized = post.normalized()
+print(normalized.subject)  # Clean Markdown text
 ```
 
 ### Filters

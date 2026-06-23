@@ -53,20 +53,30 @@ Cookies are saved to and loaded from disk when `cookie_path` is set:
 
 ```python
 from pathlib import Path
-from piazza_sdk import PiazzaSession, SessionConfig
+from piazza_sdk import SessionConfig, SessionStateManager
 
 config = SessionConfig(
     course_id="your_course_id",
     cookie_path=Path("~/.piazza/cookies.json"),
 )
 
-async with PiazzaSession(config) as session:
+async with SessionStateManager(config) as session:
     # Cookies are saved to the specified path on close
     # and restored on next session open
     ...
 ```
 
 Without `cookie_path`, cookies are held in memory only for the session lifetime.
+
+### CSRF Token Persistence
+
+The CSRF token is automatically persisted alongside session cookies. On session restore:
+
+1. The CSRF token is loaded from the cookie jar
+2. The `x-csrf-token` header is re-applied to the HTTP client
+3. Subsequent API calls carry the restored token
+
+This avoids re-fetching the login page when resuming a session from disk.
 
 ### Cookie Encryption
 
@@ -95,11 +105,11 @@ print(key)
 Sessions auto-refresh before expiration. Default lifetime is 4 hours:
 
 ```python
-from piazza_sdk import Piazza, PiazzaSession, SessionConfig
+from piazza_sdk import Piazza, SessionConfig, SessionStateManager
 
 config = SessionConfig(course_id="your_course_id")
 
-async with PiazzaSession(config) as session:
+async with SessionStateManager(config) as session:
     await session.login(email="...", password="...")
 
     # Session auto-refreshes when nearing expiration

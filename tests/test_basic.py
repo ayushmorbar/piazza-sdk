@@ -31,6 +31,7 @@ from piazza_sdk import (
     ValidationError,
     Visibility,
 )
+from piazza_sdk.models.post import Answer, Child, FollowUp
 
 
 class TestEnums:
@@ -106,6 +107,55 @@ class TestModels:
         assert post.id == "post123"
         assert post.type == PostType.QUESTION
         assert post.title == "Test Post"
+
+    def test_post_normalized(self):
+        """Test Post.normalized() converts HTML content to Markdown."""
+        post = Post(
+            id="norm1",
+            type="question",
+            title="<b>Bold Title</b>",
+            subject="<p>Subject with <em>emphasis</em></p>",
+            author="test@example.com",
+            children=[
+                Child(
+                    id="c1",
+                    type="answer",
+                    subject="",
+                    content="<p>Answer <strong>content</strong></p>",
+                    uid="user1",
+                )
+            ],
+            answers=[Answer(id="a1", uid="user1", content="<pre>code block</pre>")],
+            followups=[
+                FollowUp(
+                    id="f1",
+                    uid="user1",
+                    subject="Followup <em>subject</em>",
+                    content="<p>Followup body</p>",
+                )
+            ],
+        )
+
+        normalized = post.normalized()
+        # Original unchanged
+        assert "<b>" in post.title
+        assert "<p>" in post.subject
+        # Normalized has Markdown
+        assert "**Bold Title**" in normalized.title
+        assert "emphasis" in normalized.subject
+        assert "<" not in normalized.children[0].content  # HTML stripped
+        assert "content" in normalized.children[0].content
+        assert "<" not in normalized.answers[0].content  # HTML stripped
+        assert "code block" in normalized.answers[0].content
+        assert "subject" in normalized.followups[0].subject
+        assert "Followup body" in normalized.followups[0].content
+
+    def test_post_normalized_empty_content(self):
+        """Test Post.normalized() handles empty content gracefully."""
+        post = Post(id="norm2", title="", subject="")
+        normalized = post.normalized()
+        assert normalized.title == ""
+        assert normalized.subject == ""
 
     def test_feed_item_model(self):
         """Test FeedItem model."""

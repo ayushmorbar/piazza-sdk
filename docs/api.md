@@ -3,11 +3,11 @@
 ## Quick Start
 
 ```python
-from piazza_sdk import PiazzaSession, SessionConfig, Piazza
+from piazza_sdk import SessionConfig, SessionStateManager, Piazza
 
 config = SessionConfig(course_id="your_course_id")
 
-async with PiazzaSession(config) as session:
+async with SessionStateManager(config) as session:
     await session.login(email="you@university.edu", password="password")
 
     piazza = Piazza(session)
@@ -16,8 +16,8 @@ async with PiazzaSession(config) as session:
 
     # Fetch and display the feed
     feed = await network.get_feed(limit=10)
-    for item in feed.items:
-        print(f"[{item.type}] {item.title}")
+    for item in feed.feed:
+        print(f"[{item.type}] {item.subject}")
 ```
 
 ---
@@ -50,12 +50,12 @@ export PIAZZA_TIMEOUT="60"
 
 ---
 
-## SessionStateManager (PiazzaSession)
+## SessionStateManager
 
 The async context manager that owns the HTTP client lifecycle:
 
 ```python
-async with PiazzaSession(config) as session:
+async with SessionStateManager(config) as session:
     await session.login(email="user@example.com", password="pass")
 
     # Session auto-refreshes when nearing expiration
@@ -63,29 +63,50 @@ async with PiazzaSession(config) as session:
     classes = await piazza.get_user_classes()
 ```
 
-You can also restore a previous session:
+### Health Check
+
+Check if the session is still alive without a full refresh:
 
 ```python
-async with PiazzaSession(config) as session:
-    restored = await session.restore()
-    if restored:
-        piazza = Piazza(session)
-        classes = await piazza.get_user_classes()
-    else:
-        await session.login(email="user@example.com", password="pass")
-        piazza = Piazza(session)
+async with SessionStateManager(config) as session:
+    await session.login(email="user@example.com", password="pass")
+
+    # Lightweight liveness check (calls memo.get_unread_message_count)
+    alive = await session.is_session_alive()
+    if not alive:
+        await session.refresh()
 ```
 
-::: piazza_sdk.auth.SessionState
+### Authentication Headers
+
+Get CSRF headers for custom requests:
+
+```python
+headers = session.get_auth_headers()
+# Returns: {"x-csrf-token": "..."} or {}
+```
+
+### Logout
+
+Terminate the session and release resources:
+
+```python
+await session.logout()  # Alias for session.close()
+```
+
+::: piazza_sdk.adapters.session.SessionStateManager
     options:
       show_source: false
       members:
         - login
-        - restore
+        - logout
         - close
-        - needs_refresh
         - refresh
-        - get_stored_credentials
+        - is_session_alive
+        - get_auth_headers
+        - needs_refresh
+        - client
+        - config
 
 ---
 
@@ -293,6 +314,10 @@ print(f"Type: {post.type}")
 print(f"Author: {post.author}")
 print(f"Views: {post.views}")
 print(f"Tags: {post.tags}")
+
+# On-demand normalization: convert HTML content to Markdown
+normalized_post = post.normalized()
+print(normalized_post.title)  # Clean Markdown text
 
 # Access raw API data
 raw_children = post.raw.get("children", [])

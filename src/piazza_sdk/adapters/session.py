@@ -253,6 +253,49 @@ class SessionStateManager:
             return False
         return await self._cookies.load(self._cookie_path)
 
+    async def logout(self) -> None:
+        """Terminate the current session and release all resources.
+
+        Alias for :meth:`close` that satisfies the ``SessionManagerProtocol``.
+        """
+        await self.close()
+
+    def get_auth_headers(self) -> dict[str, str]:
+        """Return headers required for authenticated API requests.
+
+        Returns:
+            Dictionary containing the ``x-csrf-token`` header if a CSRF
+            token is available, otherwise an empty dictionary.
+        """
+        token = self._cookies.csrf_token
+        if token:
+            return {"x-csrf-token": token}
+        return {}
+
+    async def is_session_alive(self) -> bool:
+        """Lightweight session liveness check.
+
+        Calls ``memo.get_unread_message_count`` via RPC.  A successful
+        response (HTTP 200) indicates the session cookies are still
+        valid; any ``PiazzaSDKError`` or network failure returns ``False``.
+
+        Returns:
+            ``True`` if the session is alive, ``False`` otherwise.
+        """
+        if self._state != SessionState.AUTHENTICATED or self._client is None:
+            return False
+
+        try:
+            from piazza_sdk.adapters.http import RPC  # noqa: PLC0415
+
+            rpc = RPC(session=self, base_url=self.config.base_url, network_id="0")
+            payload = {"method": "memo.get_unread_message_count", "params": {}}
+            await rpc._request("POST", "/logic/api", json=payload)
+            return True
+        except Exception:  # noqa: BLE001
+            logger.debug("Session alive check failed", exc_info=True)
+            return False
+
     async def close(self) -> None:
         """Close the session and release resources.
 

@@ -255,9 +255,14 @@ class SessionConfig(BaseSettings):
                 self.base_url = parsed._replace(scheme="https").geturl()
 
     @property
+    def login_page_url(self) -> str:
+        """Full URL for the login page (GET to capture CSRF token)."""
+        return f"{self.base_url.rstrip('/')}/account/login"
+
+    @property
     def login_url(self) -> str:
-        """Full login URL derived from base_url."""
-        return f"{self.base_url.rstrip('/')}/do_login"
+        """Full login POST URL for credential submission."""
+        return f"{self.base_url.rstrip('/')}/class"
 
     @property
     def network_base_url(self) -> str:

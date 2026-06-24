@@ -35,27 +35,39 @@ class FeedItem(BaseModel):
             note the misspelling in Piazza's API).
     """
 
-    model_config = ConfigDict(slots=True, populate_by_name=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, populate_by_name=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     id: str = Field(description="Unique post identifier")
+    nid: str = Field(default="", description="Network ID")
+    nr: int = Field(default=0, description="Numeric post number")
     subject: str = Field(default="", description="Post title/subject line")
     type: FeedItemType | str = Field(default=FeedItemType.UNKNOWN, description="Feed item type")
+    status: str = Field(default="", description="Post status")
     created: datetime | None = Field(default=None, description="When the post was created")
     updated: datetime | None = Field(default=None, description="When the post was last updated")
     default_anonymity: FeedItemDefaultAnonymity | str = Field(
         default=FeedItemDefaultAnonymity.UNKNOWN, description="Default anonymity setting"
     )
-    uid: str = Field(default="", description="Author user ID")
-    folder: str = Field(default="", description="Folder name")
+    uid: str = Field(default="", alias="u", description="Author user ID")
+    folder: str = Field(default="", alias="fol", description="Folder name (pipe-delimited)")
+    folders: list[str] = Field(default_factory=list, description="Folder names")
     no_answer: bool = Field(default=False, description="Whether post has no answers")
     is_pinned: bool = Field(default=False, alias="pin", description="Whether post is pinned")
+    bookmarked: bool = Field(default=False, alias="book", description="Whether post is bookmarked")
     follows: bool = Field(default=False, description="Whether current user is following")
     viewed: bool = Field(default=True, description="Whether current user has viewed")
+    unique_views: int | None = Field(default=None, description="Unique view count")
+    score: float = Field(default=0.0, description="Post score")
     reputation: int = Field(default=0, description="Author reputation score")
     badge: str = Field(default="", description="Author badge or role indicator")
+    bucket_name: str = Field(default="", description="Bucket name (e.g. Pinned)")
+    bucket_order: int = Field(default=0, description="Bucket ordering")
     tags: list[str] = Field(default_factory=list, description="Post tags")
     content_snippet: str | None = Field(
         default=None, alias="content_snipet", description="Short content preview"
+    )
+    log: list[dict[str, Any]] = Field(
+        default_factory=list, alias="change_log", description="Change log entries"
     )
 
     @property
@@ -185,7 +197,7 @@ class SortFilter(FeedFilter):
 
     model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
-    order: FeedSortOrder = FeedSortOrder.UPDATED
+    order: FeedSortOrder = FeedSortOrder.UPDATED_DESC
 
     def to_kwargs(self) -> dict[str, Any]:
         """Return ``{"sort": order_value}`` parameters."""

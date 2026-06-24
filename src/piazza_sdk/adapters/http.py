@@ -91,6 +91,7 @@ class RPC:
         self._base_url = base_url.rstrip("/")
         self._nid = network_id
         self._on_auth_error = on_auth_error
+        self._last_aid: str | None = None
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -133,7 +134,11 @@ class RPC:
                 )
                 raise _map_http_error(exc) from exc
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            # Track the aid concurrency token from every response
+            if isinstance(data, dict) and "aid" in data:
+                self._last_aid = data["aid"]
+            return data
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 401 and self._on_auth_error is not None:
                 logger.info("RPC %s %s 401 – refreshing session", method, url)
@@ -486,3 +491,28 @@ class RPC:
             error_cls=ContentError,
             error_msg=f"Failed to get similar posts for {post_id}",
         )
+
+    async def get_user_profile(self) -> dict[str, Any]:
+        """Get the authenticated user's profile via JSON-RPC.
+
+        Returns:
+            Dictionary with user profile data including name, email,
+            school, roles, skills, and enrolled classes.
+        """
+        payload = {"method": "user_profile.get_profile", "params": {}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=UserError, error_msg="Failed to get user profile"
+        )
+
+    async def get_unread_message_count(self) -> int:
+        """Get the count of unread messages (heartbeat endpoint).
+
+        Returns:
+            Integer count of unread direct messages.
+        """
+        payload = {"method": "memo.get_unread_message_count", "params": {}}
+        result = await self._safe_call(
+            "/logic/api", payload, error_cls=PiazzaSDKError, error_msg="Failed to get unread count"
+        )
+        count = result.get("result", 0) if isinstance(result, dict) else 0
+        return int(count)

@@ -60,19 +60,23 @@ class ChangeLogEntry(BaseModel):
         cid: Child element ID the change relates to, if any.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, populate_by_name=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     anon: AnonymityLevel = Field(
         default=AnonymityLevel.NO, description="Anonymity level of the change author"
     )
-    uid: str = Field(default="", description="User ID of the person who made the change")
+    uid: str = Field(default="", alias="u", description="User ID of the person who made the change")
     data: str | None = Field(default=None, description="Free-form data associated with the change")
     to: str | None = Field(default=None, description="Target value after the change, if applicable")
     v: Visibility = Field(default=Visibility.PUBLIC, description="Visibility of the change record")
     type: ChangeType = Field(
-        default=ChangeType.CREATE, description="Type of change (create, update, endorse, etc.)"
+        default=ChangeType.CREATE,
+        alias="n",
+        description="Type of change (create, update, endorse, etc.)",
     )
-    when: datetime | None = Field(default=None, description="Timestamp when the change occurred")
+    when: datetime | None = Field(
+        default=None, alias="t", description="Timestamp when the change occurred"
+    )
     cid: str = Field(default="", description="Child element ID the change relates to, if any")
 
 
@@ -115,10 +119,10 @@ class FollowUp(BaseModel):
         anon: Anonymity level of the author.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, populate_by_name=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     id: str = Field(default="", description="Unique identifier for this follow-up")
-    uid: str = Field(default="", description="Author's user ID")
+    uid: str = Field(default="", alias="u", description="Author's user ID")
     subject: str = Field(default="", description="Follow-up subject line")
     content: str = Field(default="", description="Follow-up body content (HTML)")
     created: datetime | None = Field(
@@ -148,13 +152,13 @@ class Child(BaseModel):
         followed: Whether the current user is following this element.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, populate_by_name=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     id: str = Field(default="", description="Unique identifier for this child element")
     type: str = Field(default="", description="Element type (e.g. followup, answer)")
     subject: str = Field(default="", description="Child subject line")
     content: str = Field(default="", description="Child body content (HTML)")
-    uid: str = Field(default="", description="Author's user ID")
+    uid: str = Field(default="", alias="u", description="Author's user ID")
     created: datetime | None = Field(
         default=None, description="Timestamp when the child was posted"
     )
@@ -322,7 +326,7 @@ class Post(BaseModel):
         revisions: Full revision history.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, populate_by_name=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     id: str = Field(description="Unique post identifier (e.g. j5yj4g5d4p2qg3)")
     type: PostType = Field(default=PostType.NOTE, description="Post type (question, note, poll)")
@@ -350,7 +354,7 @@ class Post(BaseModel):
     )
     answers: list[Answer] = Field(default_factory=list, description="Answer posts on this post")
     change_log: list[ChangeLogEntry] = Field(
-        default_factory=list, description="Edit history entries"
+        default_factory=list, alias="log", description="Edit history entries"
     )
     endorsements: list[Endorsement] = Field(
         default_factory=list, description="Endorsement/upvote records"
@@ -439,7 +443,7 @@ class Post(BaseModel):
             followups=[
                 FollowUp(
                     id=f.id,
-                    uid=f.uid,
+                    u=f.uid,
                     subject=_norm(f.subject),
                     content=_norm(f.content),
                     created=f.created,
@@ -464,7 +468,7 @@ class Post(BaseModel):
                 )
                 for a in self.answers
             ],
-            change_log=self.change_log,
+            log=self.change_log,
             endorsements=self.endorsements,
             config=self.config,
             children=[
@@ -473,7 +477,7 @@ class Post(BaseModel):
                     type=c.type,
                     subject=_norm(c.subject),
                     content=_norm(c.content),
-                    uid=c.uid,
+                    u=c.uid,
                     created=c.created,
                     updated=c.updated,
                     anon=c.anon,

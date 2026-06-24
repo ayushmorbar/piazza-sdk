@@ -238,7 +238,7 @@ class TestSessionStateManagerProtocol:
         mgr = self._make_manager()
         mgr._cookies.csrf_token = "test_token_123"
         headers = mgr.get_auth_headers()
-        assert headers == {"x-csrf-token": "test_token_123"}
+        assert headers == {"csrf-token": "test_token_123"}
 
     def test_get_auth_headers_without_token(self):
         """get_auth_headers() returns empty dict when no CSRF token."""

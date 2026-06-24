@@ -6,6 +6,7 @@ cookie management, request lifecycle, and automatic session refresh.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -23,6 +24,9 @@ logger = logging.getLogger(__name__)
 
 # Minimum expected CSRF token length for validation
 _MIN_CSRF_TOKEN_LENGTH = 16
+
+# Default heartbeat interval (seconds) — spec recommends 300s
+_DEFAULT_HEARTBEAT_INTERVAL: float = 300.0
 
 
 class SessionStateManager:
@@ -64,6 +68,8 @@ class SessionStateManager:
         self._session_lifetime = session_lifetime or self.DEFAULT_SESSION_LIFETIME
         self._email: str | None = None
         self._password: str | None = None
+        self._heartbeat_task: asyncio.Task[None] | None = None
+        self._heartbeat_interval: float | None = None
 
     @property
     def state(self) -> SessionState:
@@ -119,9 +125,9 @@ class SessionStateManager:
         self._password = password
 
         try:
-            # Fetch login page to get CSRF token
+            # Stage 1: Fetch login page to get CSRF token and _piazza_s cookie
             login_page = await self.client.get(
-                self.config.login_url, headers={"User-Agent": self.config.user_agent}
+                self.config.login_page_url, headers={"User-Agent": self.config.user_agent}
             )
             csrf_token = self._extract_csrf_token(login_page.text)
 
@@ -132,18 +138,16 @@ class SessionStateManager:
                     f"(expected >= {_MIN_CSRF_TOKEN_LENGTH} chars)"
                 )
 
-            payload = {
-                "email": email,
-                "password": password,
-                "action": "login",
-                "course_id": self.config.course_id,
-                "csrf_token": csrf_token,
-            }
+            # Stage 2: POST credentials as form-urlencoded to /class
+            payload = {"email": email, "password": password, "csrf_token": csrf_token}
 
             response = await self.client.post(
                 self.config.login_url,
                 data=payload,
-                headers={"User-Agent": self.config.user_agent},
+                headers={
+                    "User-Agent": self.config.user_agent,
+                    "Referer": self.config.login_page_url,
+                },
                 follow_redirects=True,
             )
 
@@ -186,7 +190,7 @@ class SessionStateManager:
 
         # Persist CSRF token on client headers for future RPC calls
         assert self._client is not None  # noqa: S101 - guaranteed non-None after login
-        self._client.headers["x-csrf-token"] = csrf_token
+        self._client.headers["csrf-token"] = csrf_token
         # Persist CSRF token in cookie jar for session resumption
         self._cookies.csrf_token = csrf_token
 
@@ -264,20 +268,20 @@ class SessionStateManager:
         """Return headers required for authenticated API requests.
 
         Returns:
-            Dictionary containing the ``x-csrf-token`` header if a CSRF
+            Dictionary containing the ``csrf-token`` header if a CSRF
             token is available, otherwise an empty dictionary.
         """
         token = self._cookies.csrf_token
         if token:
-            return {"x-csrf-token": token}
+            return {"csrf-token": token}
         return {}
 
     async def is_session_alive(self) -> bool:
         """Lightweight session liveness check.
 
         Calls ``memo.get_unread_message_count`` via RPC.  A successful
-        response (HTTP 200) indicates the session cookies are still
-        valid; any ``PiazzaSDKError`` or network failure returns ``False``.
+        response indicates the session cookies are still valid; any
+        ``PiazzaSDKError`` or network failure returns ``False``.
 
         Returns:
             ``True`` if the session is alive, ``False`` otherwise.
@@ -289,18 +293,58 @@ class SessionStateManager:
             from piazza_sdk.adapters.http import RPC  # noqa: PLC0415
 
             rpc = RPC(session=self, base_url=self.config.base_url, network_id="0")
-            payload = {"method": "memo.get_unread_message_count", "params": {}}
-            await rpc._request("POST", "/logic/api", json=payload)
+            await rpc.get_unread_message_count()
             return True
         except Exception:  # noqa: BLE001
             logger.debug("Session alive check failed", exc_info=True)
             return False
+
+    def start_heartbeat(self, interval: float = _DEFAULT_HEARTBEAT_INTERVAL) -> None:
+        """Start a background keep-alive heartbeat.
+
+        Pings ``memo.get_unread_message_count`` every *interval* seconds
+        to prevent server-side session expiration.
+
+        Args:
+            interval: Seconds between heartbeats (default 300s per spec).
+        """
+        if self._heartbeat_task is not None and not self._heartbeat_task.done():
+            return  # already running
+        self._heartbeat_interval = interval
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        logger.debug("Heartbeat started (interval=%.0fs)", interval)
+
+    def stop_heartbeat(self) -> None:
+        """Stop the background heartbeat if running."""
+        if self._heartbeat_task is not None and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            logger.debug("Heartbeat stopped")
+        self._heartbeat_task = None
+
+    async def _heartbeat_loop(self) -> None:
+        """Background loop that pings the server to keep the session alive."""
+        try:
+            while True:
+                await asyncio.sleep(self._heartbeat_interval or _DEFAULT_HEARTBEAT_INTERVAL)
+                if self._state != SessionState.AUTHENTICATED:
+                    break
+                alive = await self.is_session_alive()
+                if not alive:
+                    logger.warning("Heartbeat: session expired, attempting refresh")
+                    try:
+                        await self.refresh()
+                    except Exception:  # noqa: BLE001
+                        logger.error("Heartbeat: session refresh failed", exc_info=True)
+                        break
+        except asyncio.CancelledError:
+            pass
 
     async def close(self) -> None:
         """Close the session and release resources.
 
         Transitions: any → CLOSED
         """
+        self.stop_heartbeat()
         if self._client is not None:
             await self._client.aclose()
             self._client = None
@@ -315,6 +359,12 @@ class SessionStateManager:
     def _extract_csrf_token(html: str) -> str | None:
         """Extract CSRF token from login page HTML.
 
+        Piazza embeds the CSRF token in a ``<meta>`` tag:
+        ``<meta name="csrf-token" content="...">``
+
+        Also supports legacy ``<input>`` and JSON patterns for backward
+        compatibility.
+
         Args:
             html: Raw HTML content from the login page.
 
@@ -322,9 +372,16 @@ class SessionStateManager:
             The CSRF token string, or None if not found.
         """
         patterns = [
+            # Piazza 2026: <meta name="csrf-token" content="...">
+            r'<meta\s+name=["\']csrf-token["\']\s+content=["\']([^"\']+)["\']',
+            r'<meta\s+content=["\']([^"\']+)["\']\s+name=["\']csrf-token["\']',
+            # Legacy: <input name="csrf_token" value="...">
             r'name=["\']csrf_token["\']\s+value=["\']([^"\']+)["\']',
             r'name=["\']_token["\']\s+value=["\']([^"\']+)["\']',
+            # JSON embedded token
             r'"csrf_token"\s*:\s*"([^"]+)"',
+            r'"csrf-token"\s*:\s*"([^"]+)"',
+            # Data attribute
             r'data-csrf=["\']([^"\']+)["\']',
         ]
         for pattern in patterns:
@@ -337,14 +394,17 @@ class SessionStateManager:
         """Enter async context — creates the HTTP client and restores cookies."""
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(self.config.timeout),
-            headers={"User-Agent": self.config.user_agent},
+            headers={
+                "User-Agent": self.config.user_agent,
+                "Referer": f"{self.config.base_url}/class/{self.config.course_id}",
+            },
             follow_redirects=True,
         )
         # Auto-restore persisted cookies if available
         await self.restore_cookies()
         # Restore persisted CSRF token header for session resumption
         if self._cookies.csrf_token is not None:
-            self._client.headers["x-csrf-token"] = self._cookies.csrf_token
+            self._client.headers["csrf-token"] = self._cookies.csrf_token
             logger.debug("Restored CSRF token from cookie jar")
         return self
 

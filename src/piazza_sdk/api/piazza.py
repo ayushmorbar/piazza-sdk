@@ -86,19 +86,20 @@ class Piazza:
             raise PiazzaSDKError(f"Failed to get user classes: {exc}") from exc
 
     async def get_user_profile(self) -> dict[str, Any]:
-        """Get the current user's profile.
+        """Get the current user's profile via JSON-RPC.
 
+        Uses the canonical ``user_profile.get_profile`` RPC method.
         Automatically restores the session if expired.
 
         Returns:
-            User profile dictionary.
+            User profile dictionary with name, email, school, roles,
+            skills, tags, and enrolled classes.
         """
         if self._session.needs_refresh:
             await self._session.refresh()
         try:
-            return await self._get_user_rpc()._safe_call(
-                "/user/api/get_user_profile", {}, error_msg="Failed to get user profile"
-            )
+            raw = await self._get_user_rpc().get_user_profile()
+            return raw.get("result", raw) if isinstance(raw, dict) else raw  # type: ignore[no-any-return]
         except PiazzaSDKError:
             raise
         except Exception as exc:

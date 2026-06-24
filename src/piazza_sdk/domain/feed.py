@@ -7,6 +7,10 @@ from __future__ import annotations
 
 __all__ = ["get_feed", "get_similar_posts"]
 
+import base64
+import binascii
+import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError as PydanticValidationError
@@ -17,6 +21,32 @@ from piazza_sdk.models.feed import Feed, FeedItem
 if TYPE_CHECKING:
     from piazza_sdk.api.rpc import RPC
     from piazza_sdk.auth import SessionStateManager
+
+logger = logging.getLogger(__name__)
+
+
+def _decode_feed_response(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """Decode feed response, handling Base64-encoded payloads.
+
+    Piazza's ``network.get_my_feed`` may return the feed as a Base64-encoded
+    JSON string for bandwidth optimization.  This function detects and decodes
+    such responses, falling back to standard dict extraction.
+    """
+    feed = raw.get("feed", [])
+    if isinstance(feed, str):
+        try:
+            decoded = base64.b64decode(feed).decode("utf-8")
+            parsed = json.loads(decoded)
+            if isinstance(parsed, dict):
+                items = parsed.get("feed", [])
+                return items if isinstance(items, list) else []
+            if isinstance(parsed, list):
+                return parsed
+        except (binascii.Error, json.JSONDecodeError, UnicodeDecodeError):
+            logger.debug("Base64 feed decode failed, treating as raw")
+    if isinstance(feed, list):
+        return feed
+    return []
 
 
 async def get_feed(
@@ -45,7 +75,8 @@ async def get_feed(
     """
     try:
         raw = await rpc.get_my_feed(limit=limit, offset=offset, **kwargs)
-        items = [FeedItem(**item) for item in raw.get("feed", [])]
+        feed_data = _decode_feed_response(raw)
+        items = [FeedItem.model_validate(item) for item in feed_data]
         return Feed(
             feed=items,
             total=raw.get("total", len(items)),

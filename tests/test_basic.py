@@ -67,8 +67,8 @@ class TestEnums:
 
     def test_feed_sort_order(self):
         """Test FeedSortOrder enum."""
-        assert FeedSortOrder.UPDATED.value == "updated"
-        assert FeedSortOrder.CREATED.value == "created"
+        assert FeedSortOrder.UPDATED_DESC.value == "updated_desc"
+        assert FeedSortOrder.ACTIVITY_ASC.value == "activity_asc"
 
 
 class TestModels:

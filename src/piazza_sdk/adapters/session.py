@@ -71,6 +71,17 @@ class SessionStateManager:
         self._heartbeat_task: asyncio.Task[None] | None = None
         self._heartbeat_interval: float | None = None
 
+    def _default_headers(self) -> dict[str, str]:
+        """Build default headers matching a modern Chrome browser fingerprint."""
+        platform = self.config.sec_ch_ua_platform
+        return {
+            "User-Agent": self.config.user_agent,
+            "Content-Type": "application/json; charset=UTF-8",
+            "sec-ch-ua": '"Chromium";v="125", "Not=A?Brand";v="8", "Google Chrome";v="125"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": f'"{platform}"',
+        }
+
     @property
     def state(self) -> SessionState:
         """Current session state."""
@@ -126,9 +137,9 @@ class SessionStateManager:
 
         try:
             # Stage 1: Fetch login page to get CSRF token and _piazza_s cookie
-            login_page = await self.client.get(
-                self.config.login_page_url, headers={"User-Agent": self.config.user_agent}
-            )
+            login_headers = self._default_headers()
+            login_headers["Referer"] = self.config.login_page_url
+            login_page = await self.client.get(self.config.login_page_url, headers=login_headers)
             csrf_token = self._extract_csrf_token(login_page.text)
 
             if csrf_token is None or len(csrf_token) < _MIN_CSRF_TOKEN_LENGTH:
@@ -141,14 +152,12 @@ class SessionStateManager:
             # Stage 2: POST credentials as form-urlencoded to /class
             payload = {"email": email, "password": password, "csrf_token": csrf_token}
 
+            post_headers = self._default_headers()
+            post_headers["Referer"] = self.config.login_page_url
+            # Override Content-Type for form-urlencoded login POST
+            post_headers["Content-Type"] = "application/x-www-form-urlencoded"
             response = await self.client.post(
-                self.config.login_url,
-                data=payload,
-                headers={
-                    "User-Agent": self.config.user_agent,
-                    "Referer": self.config.login_page_url,
-                },
-                follow_redirects=True,
+                self.config.login_url, data=payload, headers=post_headers, follow_redirects=True
             )
 
             await self._finish_login(response, csrf_token)
@@ -223,7 +232,7 @@ class SessionStateManager:
             await self.close()
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.config.timeout),
-                headers={"User-Agent": self.config.user_agent},
+                headers=self._default_headers(),
                 follow_redirects=True,
             )
             self._state = SessionState.UNAUTHENTICATED
@@ -392,13 +401,10 @@ class SessionStateManager:
 
     async def __aenter__(self) -> SessionStateManager:
         """Enter async context — creates the HTTP client and restores cookies."""
+        headers = self._default_headers()
+        headers["Referer"] = f"{self.config.base_url}/class/{self.config.course_id}"
         self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(self.config.timeout),
-            headers={
-                "User-Agent": self.config.user_agent,
-                "Referer": f"{self.config.base_url}/class/{self.config.course_id}",
-            },
-            follow_redirects=True,
+            timeout=httpx.Timeout(self.config.timeout), headers=headers, follow_redirects=True
         )
         # Auto-restore persisted cookies if available
         await self.restore_cookies()

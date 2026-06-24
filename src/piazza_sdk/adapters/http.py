@@ -218,7 +218,7 @@ class RPC:
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
-        payload = {**kwargs, "action": "content.create", "nid": self._nid}
+        payload = {**kwargs, "action": "content.create", "nid": self._nid, "aid": self._last_aid}
         return await self._safe_call(
             "/class/api/content_create",
             payload,
@@ -231,7 +231,7 @@ class RPC:
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
-        payload = {**kwargs, "action": "content.update", "nid": self._nid}
+        payload = {**kwargs, "action": "content.update", "nid": self._nid, "aid": self._last_aid}
         return await self._safe_call(
             "/class/api/content_update",
             payload,
@@ -241,7 +241,12 @@ class RPC:
 
     async def content_delete(self, post_id: str) -> dict[str, Any]:
         """Delete a post."""
-        payload = {"action": "content.delete", "cid": post_id, "nid": self._nid}
+        payload = {
+            "action": "content.delete",
+            "cid": post_id,
+            "nid": self._nid,
+            "aid": self._last_aid,
+        }
         return await self._safe_call(
             "/class/api/content_delete",
             payload,
@@ -286,6 +291,7 @@ class RPC:
             "nid": self._nid,
             "content": content,
             "instructor_answer": instructor_answer,
+            "aid": self._last_aid,
         }
         return await self._safe_call(
             "/class/api/content_answer",
@@ -296,7 +302,12 @@ class RPC:
 
     async def content_upvote(self, post_id: str) -> dict[str, Any]:
         """Upvote a post or answer."""
-        payload = {"action": "content.upvote", "cid": post_id, "nid": self._nid}
+        payload = {
+            "action": "content.upvote",
+            "cid": post_id,
+            "nid": self._nid,
+            "aid": self._last_aid,
+        }
         return await self._safe_call(
             "/class/api/content_upvote",
             payload,
@@ -306,7 +317,13 @@ class RPC:
 
     async def content_add_tag(self, post_id: str, tag: str) -> dict[str, Any]:
         """Add a tag to a post."""
-        payload = {"action": "content.add_tag", "cid": post_id, "nid": self._nid, "tag": tag}
+        payload = {
+            "action": "content.add_tag",
+            "cid": post_id,
+            "nid": self._nid,
+            "tag": tag,
+            "aid": self._last_aid,
+        }
         return await self._safe_call(
             "/class/api/content_add_tag",
             payload,
@@ -316,7 +333,13 @@ class RPC:
 
     async def content_remove_tag(self, post_id: str, tag: str) -> dict[str, Any]:
         """Remove a tag from a post."""
-        payload = {"action": "content.remove_tag", "cid": post_id, "nid": self._nid, "tag": tag}
+        payload = {
+            "action": "content.remove_tag",
+            "cid": post_id,
+            "nid": self._nid,
+            "tag": tag,
+            "aid": self._last_aid,
+        }
         return await self._safe_call(
             "/class/api/content_remove_tag",
             payload,
@@ -363,7 +386,12 @@ class RPC:
         blocked = _BLOCKED_KEYS & preferences.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
-        payload = {**preferences, "action": "update_user_preferences", "nid": self._nid}
+        payload = {
+            **preferences,
+            "action": "update_user_preferences",
+            "nid": self._nid,
+            "aid": self._last_aid,
+        }
         try:
             await self._request("POST", "/class/api/update_user_preferences", json=payload)
         except PiazzaSDKError as exc:
@@ -375,7 +403,10 @@ class RPC:
         Args:
             post_id: The CID of the post to mark unread.
         """
-        payload = {"method": "content.mark_unread", "params": {"nid": self._nid, "cid": post_id}}
+        payload = {
+            "method": "content.mark_unread",
+            "params": {"nid": self._nid, "cid": post_id, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api",
             payload,
@@ -391,7 +422,7 @@ class RPC:
         """
         payload = {
             "method": "network.add_folder",
-            "params": {"nid": self._nid, "name": folder_name},
+            "params": {"nid": self._nid, "name": folder_name, "aid": self._last_aid},
         }
         return await self._safe_call(
             "/logic/api",
@@ -409,7 +440,7 @@ class RPC:
         """
         payload = {
             "method": "content.add_badge",
-            "params": {"nid": self._nid, "cid": post_id, "type": badge_type},
+            "params": {"nid": self._nid, "cid": post_id, "type": badge_type, "aid": self._last_aid},
         }
         return await self._safe_call(
             "/logic/api",
@@ -429,7 +460,7 @@ class RPC:
         """
         payload = {
             "method": "asset.get_upload_url",
-            "params": {"nid": self._nid, "filename": filename},
+            "params": {"nid": self._nid, "filename": filename, "aid": self._last_aid},
         }
         return await self._safe_call(
             "/logic/api",
@@ -463,6 +494,7 @@ class RPC:
                 "content": content,
                 "type": post_type,
                 "has_stale_thread": True,
+                "aid": self._last_aid,
             },
         }
         return await self._safe_call(
@@ -516,3 +548,38 @@ class RPC:
         )
         count = result.get("result", 0) if isinstance(result, dict) else 0
         return int(count)
+
+    async def get_class_profile(self) -> dict[str, Any]:
+        """Get course-specific profile and behavioral settings.
+
+        Distinct from ``user_profile.get_profile`` — this returns
+        grading config, folder structure, anonymous posting rules,
+        endorsement settings, and LTI integration hooks for the
+        current network.
+
+        Returns:
+            Dictionary with class profile configuration.
+        """
+        payload = {"method": "class_profile.get_profile", "params": {"nid": self._nid}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to get class profile"
+        )
+
+    async def set_user_settings(self, settings: dict[str, Any]) -> dict[str, Any]:
+        """Persist local UI state to the backend.
+
+        Saves settings like collapsed folders, dark mode preference,
+        and other UI state. Firing occasional updates helps the
+        session appear human-like.
+
+        Args:
+            settings: Dictionary of UI settings to persist
+                      (e.g. ``{"hw1_folder_collapsed": true}``).
+
+        Returns:
+            Response dictionary from the server.
+        """
+        payload = {"method": "user.set_settings", "params": {"settings": settings}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to set user settings"
+        )

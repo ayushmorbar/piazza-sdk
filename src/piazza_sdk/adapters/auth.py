@@ -222,7 +222,12 @@ class SessionConfig(BaseSettings):
     model_config = {"env_prefix": "PIAZZA_"}
 
     course_id: str
-    user_agent: str = "piazza-sdk-python/2026.06.22"
+    user_agent: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    )
+    sec_ch_ua_platform: str = "Windows"
     base_url: str = PIAZZA_BASE_URL
     timeout: float = 30.0
     retries: int = 3

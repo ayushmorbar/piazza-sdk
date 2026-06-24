@@ -16,10 +16,10 @@ class TestSmokeSessionConfig:
     """Verify SessionConfig instantiation and defaults."""
 
     def test_session_config_defaults(self):
-        """SessionConfig has correct default user_agent with CalVer."""
+        """SessionConfig has correct default user_agent matching Chrome browser."""
         config = SessionConfig(course_id="test_course")
         assert config.course_id == "test_course"
-        assert "piazza-sdk-python/" in config.user_agent
+        assert "Chrome" in config.user_agent
         assert config.timeout == 30.0
 
     def test_session_config_custom_ua(self):

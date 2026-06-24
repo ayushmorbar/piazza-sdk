@@ -51,7 +51,7 @@ docs = [
 
 [project.urls]
 Homepage = "https://github.com/ayushmorbar/piazza-sdk"
-Documentation = "https://ayushmorbar.github.io/piazza_sdk/"
+Documentation = "https://ayushmorbar.github.io/piazza-sdk/"
 Repository = "https://github.com/ayushmorbar/piazza-sdk"
 Issues = "https://github.com/ayushmorbar/piazza-sdk/issues"
 Changelog = "https://github.com/ayushmorbar/piazza-sdk/blob/main/CHANGELOG.md"

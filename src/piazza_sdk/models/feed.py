@@ -197,7 +197,7 @@ class SortFilter(FeedFilter):
 
     model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
-    order: FeedSortOrder = FeedSortOrder.UPDATED_DESC
+    order: FeedSortOrder = FeedSortOrder.UPDATED
 
     def to_kwargs(self) -> dict[str, Any]:
         """Return ``{"sort": order_value}`` parameters."""

@@ -67,8 +67,8 @@ class TestEnums:
 
     def test_feed_sort_order(self):
         """Test FeedSortOrder enum."""
-        assert FeedSortOrder.UPDATED_DESC.value == "updated_desc"
-        assert FeedSortOrder.ACTIVITY_ASC.value == "activity_asc"
+        assert FeedSortOrder.UPDATED.value == "updated"
+        assert FeedSortOrder.CREATED.value == "created"
 
 
 class TestModels:
@@ -193,7 +193,7 @@ class TestModels:
         endorsement_data = {
             "role": "student",
             "name": "Test User",
-            "endorser": "uid123",
+            "endorser": {"id": "uid123", "name": "Test User", "role": "student"},
             "admin": False,
             "photo": None,
             "id": "endorser123",
@@ -205,6 +205,7 @@ class TestModels:
         endorsement = Endorsement(**endorsement_data)
         assert endorsement.role == "student"
         assert endorsement.name == "Test User"
+        assert endorsement.endorser["id"] == "uid123"
 
 
 class TestFilters:

@@ -54,10 +54,10 @@ class UserRole(StrEnum):
 
 
 class FeedSortOrder(StrEnum):
-    """Sort order for feed results."""
+    """Feed sort order as sent to the Piazza API."""
 
-    UPDATED_DESC = "updated_desc"  # Sort by most recently updated (newest first)
-    ACTIVITY_ASC = "activity_asc"  # Sort by activity level (least active first)
+    UPDATED = "updated"  # Sort by most recently updated (newest first)
+    CREATED = "created"  # Sort by creation time
 
 
 class FeedItemType(StrEnum):

@@ -34,7 +34,9 @@ class Endorsement(BaseModel):
 
     role: str = Field(default="", description="Endorser's role (e.g. student, instructor)")
     name: str = Field(default="", description="Endorser display name")
-    endorser: str | None = Field(default=None, description="Endorser user ID, or None if anonymous")
+    endorser: dict[str, Any] | None = Field(
+        default=None, description="Endorser user info (id, name, photo, role, etc.)"
+    )
     admin: bool = Field(default=False, description="Whether the endorser is a network admin")
     photo: str | None = Field(default=None, description="Endorser photo path, if available")
     id: str = Field(default="", description="Endorsement record identifier")
@@ -281,16 +283,18 @@ class PostConfig(BaseModel):
     """Post configuration settings.
 
     Attributes:
-        name: Configuration name or label.
-        instructor_note: Note from the instructor, if set.
-        created: Timestamp when the configuration was created.
+        editor: Editor type used for this post (e.g., ``"rich_text"``).
+        has_emails_sent: Whether notification emails have been sent for this post.
+        is_default: Whether this post uses default configuration.
+        schedule_later_time: Scheduled time for later posting, if any.
     """
 
     model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
-    name: str = Field(default="", description="Configuration name or label")
-    instructor_note: str = Field(default="", description="Note from the instructor, if set")
-    created: str = Field(default="", description="Timestamp when the configuration was created")
+    editor: str = Field(default="rich_text", description="Editor type for this post")
+    has_emails_sent: bool = Field(default=False, description="Whether emails have been sent")
+    is_default: bool = Field(default=True, description="Whether this is default config")
+    schedule_later_time: str | None = Field(default=None, description="Scheduled post time")
 
 
 class Post(BaseModel):
@@ -301,25 +305,36 @@ class Post(BaseModel):
 
     Attributes:
         id: Unique post identifier (e.g. ``"j5yj4g5d4p2qg3"``).
+        nr: Numeric post number within the network (e.g. 42).
         type: Post type (question, note, poll).
         title: Post title/subject line.
         subject: Alternative subject text (alias for title in some contexts).
         author: Author's email or user identifier.
-        created_at: Timestamp when the post was created.
-        updated_at: Timestamp of the last update.
-        nr: Numeric post number within the network (e.g. 42).
-        raw: Raw API response dict for advanced use cases.
+        uid: Author's user ID.
+        email: Author's email address.
+        created: Timestamp when the post was created (ISO string).
+        updated: Timestamp of the last update (ISO string).
+        bucket: Folder/topic bucket name.
+        folders: List of folder names the post belongs to.
         tags: List of user-defined tags.
-        folder: Folder name the post belongs to.
         status: Post lifecycle status (active, resolved, closed, etc.).
         views: Total view count.
         unique_views: Unique viewer count (None if not available).
+        default_anonymity: Whether the post is anonymous by default.
+        is_mine: Whether the current user authored this post.
+        no_answer: Whether no answer has been accepted.
+        followed: Whether the current user is following this post.
+        config: Post configuration (editor, emails, schedule).
+        config_data: Additional config data from the API.
+        question_stats: Question statistics from the API.
+        book: Whether the post is bookmarked.
+        users: User info dict from the API.
+        raw: Raw API response dict for advanced use cases.
         students: Student participant info.
         followups: Follow-up questions/comments on this post.
         answers: Answer posts on this post.
         change_log: Edit history entries.
         endorsements: Endorsement/upvote records.
-        config: Post configuration (instructor-only, etc.).
         children: Child items (answers, follow-ups, comments).
         user_name: Display name of the author.
         visibility: Access level (public, instructors, group).
@@ -329,23 +344,45 @@ class Post(BaseModel):
     model_config = ConfigDict(slots=True, populate_by_name=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     id: str = Field(description="Unique post identifier (e.g. j5yj4g5d4p2qg3)")
+    nr: int = Field(default=0, description="Numeric post number within the network")
     type: PostType = Field(default=PostType.NOTE, description="Post type (question, note, poll)")
     title: str = Field(default="", description="Post title/subject line")
     subject: str = Field(default="", description="Alternative subject text")
     author: str = Field(default="", description="Author's email or user identifier")
-    created_at: datetime | None = Field(
+    uid: str = Field(default="", description="Author's user ID")
+    email: str = Field(default="", description="Author's email address")
+    created: datetime | None = Field(
         default=None, description="Timestamp when the post was created"
     )
-    updated_at: datetime | None = Field(default=None, description="Timestamp of the last update")
-    nr: int = Field(default=0, description="Numeric post number within the network")
-    raw: dict[str, Any] = Field(
-        default_factory=dict, description="Raw API response dict for advanced use cases"
-    )
+    updated: datetime | None = Field(default=None, description="Timestamp of the last update")
+    bucket: str = Field(default="", description="Folder/topic bucket name")
+    folders: list[str] = Field(default_factory=list, description="Folder names the post belongs to")
     tags: list[str] = Field(default_factory=list, description="List of user-defined tags")
-    folder: str = Field(default="", description="Folder name the post belongs to")
     status: PostStatus = Field(default=PostStatus.ACTIVE, description="Post lifecycle status")
     views: int = Field(default=0, description="Total view count")
     unique_views: int | None = Field(default=None, description="Unique viewer count")
+    default_anonymity: bool = Field(
+        default=False, description="Whether post is anonymous by default"
+    )
+    is_mine: bool = Field(default=False, description="Whether the current user authored this post")
+    no_answer: bool = Field(default=False, description="Whether no answer has been accepted")
+    followed: bool = Field(
+        default=False, description="Whether the current user is following this post"
+    )
+    config: PostConfig = Field(
+        default_factory=PostConfig, description="Post configuration (editor, emails, schedule)"
+    )
+    config_data: dict[str, Any] = Field(
+        default_factory=dict, description="Additional config data from the API"
+    )
+    question_stats: dict[str, Any] = Field(
+        default_factory=dict, description="Question statistics from the API"
+    )
+    book: bool = Field(default=False, description="Whether the post is bookmarked")
+    users: dict[str, Any] = Field(default_factory=dict, description="User info dict from the API")
+    raw: dict[str, Any] = Field(
+        default_factory=dict, description="Raw API response dict for advanced use cases"
+    )
     students: list[StudentInfo] = Field(
         default_factory=list, description="Student participant info"
     )
@@ -359,9 +396,6 @@ class Post(BaseModel):
     endorsements: list[Endorsement] = Field(
         default_factory=list, description="Endorsement/upvote records"
     )
-    config: PostConfig = Field(
-        default_factory=PostConfig, description="Post configuration (instructor-only, etc.)"
-    )
     children: list[Child] = Field(
         default_factory=list, description="Child items (answers, follow-ups, comments)"
     )
@@ -370,6 +404,12 @@ class Post(BaseModel):
         default=Visibility.PUBLIC, description="Access level (public, instructors, group)"
     )
     revisions: list[PostRevision] = Field(default_factory=list, description="Full revision history")
+
+    # Backward compat: expose first folder as scalar property
+    @property
+    def folder(self) -> str:
+        """First folder name (backward compat). Use ``folders`` for the full list."""
+        return self.folders[0] if self.folders else ""
 
     @property
     def is_question(self) -> bool:
@@ -426,19 +466,31 @@ class Post(BaseModel):
 
         return Post(
             id=self.id,
+            nr=self.nr,
             type=self.type,
             title=_norm(self.title),
             subject=_norm(self.subject),
             author=self.author,
-            created_at=self.created_at,
-            updated_at=self.updated_at,
-            nr=self.nr,
-            raw=self.raw,
+            uid=self.uid,
+            email=self.email,
+            created=self.created,
+            updated=self.updated,
+            bucket=self.bucket,
+            folders=self.folders,
             tags=self.tags,
-            folder=self.folder,
             status=self.status,
             views=self.views,
             unique_views=self.unique_views,
+            default_anonymity=self.default_anonymity,
+            is_mine=self.is_mine,
+            no_answer=self.no_answer,
+            followed=self.followed,
+            config=self.config,
+            config_data=self.config_data,
+            question_stats=self.question_stats,
+            book=self.book,
+            users=self.users,
+            raw=self.raw,
             students=self.students,
             followups=[
                 FollowUp(
@@ -470,7 +522,6 @@ class Post(BaseModel):
             ],
             log=self.change_log,
             endorsements=self.endorsements,
-            config=self.config,
             children=[
                 Child(
                     id=c.id,

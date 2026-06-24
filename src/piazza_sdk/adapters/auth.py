@@ -25,7 +25,6 @@ from piazza_sdk.exceptions import PiazzaSDKError
 logger = logging.getLogger(__name__)
 
 PIAZZA_BASE_URL = "https://piazza.com"
-PIAZZA_LOGIN_URL = "https://piazza.com/do_login"
 
 # Minimum expected CSRF token length for validation
 _MIN_CSRF_TOKEN_LENGTH = 16

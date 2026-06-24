@@ -17,13 +17,10 @@ if TYPE_CHECKING:
 
 import httpx
 
-from piazza_sdk.adapters.auth import CookieJar, SessionConfig, SessionState
+from piazza_sdk.adapters.auth import _MIN_CSRF_TOKEN_LENGTH, CookieJar, SessionConfig, SessionState
 from piazza_sdk.exceptions import AuthenticationError, SessionClosedError
 
 logger = logging.getLogger(__name__)
-
-# Minimum expected CSRF token length for validation
-_MIN_CSRF_TOKEN_LENGTH = 16
 
 # Default heartbeat interval (seconds) — spec recommends 300s
 _DEFAULT_HEARTBEAT_INTERVAL: float = 300.0
@@ -150,7 +147,13 @@ class SessionStateManager:
                 )
 
             # Stage 2: POST credentials as form-urlencoded to /class
-            payload = {"email": email, "password": password, "csrf_token": csrf_token}
+            payload = {
+                "from": "/signup",
+                "email": email,
+                "password": password,
+                "remember": "on",
+                "csrf_token": csrf_token,
+            }
 
             post_headers = self._default_headers()
             post_headers["Referer"] = self.config.login_page_url

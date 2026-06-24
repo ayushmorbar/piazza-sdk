@@ -195,9 +195,9 @@ class RPC:
 
     async def content_get(self, post_id: str) -> dict[str, Any]:
         """Get full content for a post."""
-        payload = {"action": "content.get", "cid": post_id, "nid": self._nid}
+        payload = {"method": "content.get", "params": {"nid": self._nid, "cid": post_id}}
         return await self._safe_call(
-            "/class/api/content_get",
+            "/logic/api",
             payload,
             error_cls=ContentError,
             error_msg=f"Failed to get content for post {post_id}",
@@ -208,9 +208,9 @@ class RPC:
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
-        payload = {**kwargs, "action": "get_my_feed", "nid": self._nid}
+        payload = {"method": "network.get_my_feed", "params": {**kwargs, "nid": self._nid}}
         return await self._safe_call(
-            "/class/api/get_my_feed", payload, error_cls=FeedError, error_msg="Failed to get feed"
+            "/logic/api", payload, error_cls=FeedError, error_msg="Failed to get feed"
         )
 
     async def content_create(self, **kwargs: Any) -> dict[str, Any]:
@@ -218,12 +218,12 @@ class RPC:
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
-        payload = {**kwargs, "action": "content.create", "nid": self._nid, "aid": self._last_aid}
+        payload = {
+            "method": "content.create",
+            "params": {**kwargs, "nid": self._nid, "aid": self._last_aid},
+        }
         return await self._safe_call(
-            "/class/api/content_create",
-            payload,
-            error_cls=ContentError,
-            error_msg="Failed to create content",
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to create content"
         )
 
     async def content_update(self, **kwargs: Any) -> dict[str, Any]:
@@ -231,24 +231,22 @@ class RPC:
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
-        payload = {**kwargs, "action": "content.update", "nid": self._nid, "aid": self._last_aid}
+        payload = {
+            "method": "content.update",
+            "params": {**kwargs, "nid": self._nid, "aid": self._last_aid},
+        }
         return await self._safe_call(
-            "/class/api/content_update",
-            payload,
-            error_cls=ContentError,
-            error_msg="Failed to update content",
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to update content"
         )
 
     async def content_delete(self, post_id: str) -> dict[str, Any]:
         """Delete a post."""
         payload = {
-            "action": "content.delete",
-            "cid": post_id,
-            "nid": self._nid,
-            "aid": self._last_aid,
+            "method": "content.delete",
+            "params": {"nid": self._nid, "cid": post_id, "aid": self._last_aid},
         }
         return await self._safe_call(
-            "/class/api/content_delete",
+            "/logic/api",
             payload,
             error_cls=ContentError,
             error_msg=f"Failed to delete post {post_id}",
@@ -256,9 +254,9 @@ class RPC:
 
     async def get_users(self) -> dict[str, Any]:
         """Get users in the network."""
-        payload = {"action": "get_users", "nid": self._nid}
+        payload = {"method": "network.get_users", "params": {"nid": self._nid}}
         return await self._safe_call(
-            "/class/api/get_users", payload, error_cls=UserError, error_msg="Failed to get users"
+            "/logic/api", payload, error_cls=UserError, error_msg="Failed to get users"
         )
 
     async def search(self, query: str, **kwargs: Any) -> dict[str, Any]:
@@ -266,19 +264,19 @@ class RPC:
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
-        payload = {**kwargs, "action": "search", "nid": self._nid, "query": query}
+        payload = {
+            "method": "network.search",
+            "params": {**kwargs, "nid": self._nid, "query": query},
+        }
         return await self._safe_call(
-            "/class/api/search", payload, error_cls=SearchError, error_msg="Failed to search"
+            "/logic/api", payload, error_cls=SearchError, error_msg="Failed to search"
         )
 
     async def get_stats(self) -> dict[str, Any]:
         """Get network statistics."""
-        payload = {"action": "get_stats", "nid": self._nid}
+        payload = {"method": "network.get_stats", "params": {"nid": self._nid}}
         return await self._safe_call(
-            "/class/api/get_stats",
-            payload,
-            error_cls=StatisticsError,
-            error_msg="Failed to get stats",
+            "/logic/api", payload, error_cls=StatisticsError, error_msg="Failed to get stats"
         )
 
     async def content_answer(
@@ -286,15 +284,18 @@ class RPC:
     ) -> dict[str, Any]:
         """Post an answer to a question."""
         payload = {
-            "action": "content.answer",
-            "cid": post_id,
-            "nid": self._nid,
-            "content": content,
-            "instructor_answer": instructor_answer,
-            "aid": self._last_aid,
+            "method": "content.answer",
+            "params": {
+                "nid": self._nid,
+                "cid": post_id,
+                "content": content,
+                "type": "s_answer" if instructor_answer else "s",
+                "anonymous": "no",
+                "aid": self._last_aid,
+            },
         }
         return await self._safe_call(
-            "/class/api/content_answer",
+            "/logic/api",
             payload,
             error_cls=ContentError,
             error_msg=f"Failed to answer post {post_id}",
@@ -303,13 +304,11 @@ class RPC:
     async def content_upvote(self, post_id: str) -> dict[str, Any]:
         """Upvote a post or answer."""
         payload = {
-            "action": "content.upvote",
-            "cid": post_id,
-            "nid": self._nid,
-            "aid": self._last_aid,
+            "method": "content.add_feedback",
+            "params": {"nid": self._nid, "cid": post_id, "type": "tag_good", "aid": self._last_aid},
         }
         return await self._safe_call(
-            "/class/api/content_upvote",
+            "/logic/api",
             payload,
             error_cls=ContentError,
             error_msg=f"Failed to upvote post {post_id}",
@@ -318,14 +317,11 @@ class RPC:
     async def content_add_tag(self, post_id: str, tag: str) -> dict[str, Any]:
         """Add a tag to a post."""
         payload = {
-            "action": "content.add_tag",
-            "cid": post_id,
-            "nid": self._nid,
-            "tag": tag,
-            "aid": self._last_aid,
+            "method": "content.add_tag",
+            "params": {"nid": self._nid, "cid": post_id, "tag": tag, "aid": self._last_aid},
         }
         return await self._safe_call(
-            "/class/api/content_add_tag",
+            "/logic/api",
             payload,
             error_cls=ContentError,
             error_msg=f"Failed to add tag to post {post_id}",
@@ -334,14 +330,11 @@ class RPC:
     async def content_remove_tag(self, post_id: str, tag: str) -> dict[str, Any]:
         """Remove a tag from a post."""
         payload = {
-            "action": "content.remove_tag",
-            "cid": post_id,
-            "nid": self._nid,
-            "tag": tag,
-            "aid": self._last_aid,
+            "method": "content.remove_tag",
+            "params": {"nid": self._nid, "cid": post_id, "tag": tag, "aid": self._last_aid},
         }
         return await self._safe_call(
-            "/class/api/content_remove_tag",
+            "/logic/api",
             payload,
             error_cls=ContentError,
             error_msg=f"Failed to remove tag from post {post_id}",
@@ -349,9 +342,9 @@ class RPC:
 
     async def get_instructor_stats(self) -> dict[str, Any]:
         """Get instructor-specific statistics."""
-        payload = {"action": "get_instructor_stats", "nid": self._nid}
+        payload = {"method": "network.get_instructor_stats", "params": {"nid": self._nid}}
         return await self._safe_call(
-            "/class/api/get_instructor_stats",
+            "/logic/api",
             payload,
             error_cls=StatisticsError,
             error_msg="Failed to get instructor stats",
@@ -359,22 +352,16 @@ class RPC:
 
     async def get_online_users(self) -> dict[str, Any]:
         """Get currently online users."""
-        payload = {"action": "get_online_users", "nid": self._nid}
+        payload = {"method": "network.get_online_users", "params": {"nid": self._nid}}
         return await self._safe_call(
-            "/class/api/get_online_users",
-            payload,
-            error_cls=UserError,
-            error_msg="Failed to get online users",
+            "/logic/api", payload, error_cls=UserError, error_msg="Failed to get online users"
         )
 
     async def get_user_preferences(self) -> dict[str, Any]:
         """Get the current user's preferences for this network."""
-        payload = {"action": "get_user_preferences", "nid": self._nid}
+        payload = {"method": "network.get_user_preferences", "params": {"nid": self._nid}}
         return await self._safe_call(
-            "/class/api/get_user_preferences",
-            payload,
-            error_cls=UserError,
-            error_msg="Failed to get user preferences",
+            "/logic/api", payload, error_cls=UserError, error_msg="Failed to get user preferences"
         )
 
     async def update_user_preferences(self, preferences: dict[str, Any]) -> None:
@@ -387,13 +374,11 @@ class RPC:
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {
-            **preferences,
-            "action": "update_user_preferences",
-            "nid": self._nid,
-            "aid": self._last_aid,
+            "method": "network.update_user_preferences",
+            "params": {**preferences, "nid": self._nid, "aid": self._last_aid},
         }
         try:
-            await self._request("POST", "/class/api/update_user_preferences", json=payload)
+            await self._request("POST", "/logic/api", json=payload)
         except PiazzaSDKError as exc:
             raise UserError(f"Failed to update user preferences: {exc}") from exc
 

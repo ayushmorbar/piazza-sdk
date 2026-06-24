@@ -172,8 +172,8 @@ class RPC:
         Wraps ``_request`` with two behaviors that are otherwise copy-pasted
         across every public method:
 
-        1. Converts non-dict JSON responses to ``{}`` (avoids silent data loss
-           when Piazza returns a list or scalar).
+        1. Unwraps the JSON-RPC ``{result, error, aid}`` envelope so callers
+           receive only the ``result`` payload.
         2. Re-raises any ``PiazzaSDKError`` subclass as *error_cls* with a
            human-readable *error_msg*.
 
@@ -185,11 +185,20 @@ class RPC:
             method: HTTP method (default ``"POST"``).
 
         Returns:
-            Response dict or ``{}`` if the response is not a dict.
+            The unwrapped ``result`` dict, or ``{}`` on empty/non-dict.
         """
         try:
-            result = await self._request(method, endpoint, json=payload)
-            return result if isinstance(result, dict) else {}
+            raw = await self._request(method, endpoint, json=payload)
+            if not isinstance(raw, dict):
+                return {}
+            # JSON-RPC envelope: {"result": ..., "error": ..., "aid": ...}
+            if "result" in raw:
+                rpc_error = raw.get("error")
+                if rpc_error is not None:
+                    raise error_cls(f"{error_msg}: {rpc_error}")
+                result = raw["result"]
+                return result if isinstance(result, dict) else {}
+            return raw
         except PiazzaSDKError as exc:
             raise error_cls(f"{error_msg}: {exc}") from exc
 
@@ -253,8 +262,11 @@ class RPC:
         )
 
     async def get_users(self) -> dict[str, Any]:
-        """Get users in the network."""
-        payload = {"method": "network.get_users", "params": {"nid": self._nid}}
+        """Get all users in the network.
+
+        Uses network.get_all_users (network.get_users requires specific ids).
+        """
+        payload = {"method": "network.get_all_users", "params": {"nid": self._nid}}
         return await self._safe_call(
             "/logic/api", payload, error_cls=UserError, error_msg="Failed to get users"
         )
@@ -273,10 +285,13 @@ class RPC:
         )
 
     async def get_stats(self) -> dict[str, Any]:
-        """Get network statistics."""
+        """Get network statistics.
+
+        Uses /main/api instead of /logic/api (confirmed from reference codebase).
+        """
         payload = {"method": "network.get_stats", "params": {"nid": self._nid}}
         return await self._safe_call(
-            "/logic/api", payload, error_cls=StatisticsError, error_msg="Failed to get stats"
+            "/main/api", payload, error_cls=StatisticsError, error_msg="Failed to get stats"
         )
 
     async def content_answer(
@@ -358,11 +373,20 @@ class RPC:
         )
 
     async def get_user_preferences(self) -> dict[str, Any]:
-        """Get the current user's preferences for this network."""
+        """Get the current user's preferences for this network.
+
+        Returns empty dict if method not found (feature may not be available).
+        """
         payload = {"method": "network.get_user_preferences", "params": {"nid": self._nid}}
-        return await self._safe_call(
-            "/logic/api", payload, error_cls=UserError, error_msg="Failed to get user preferences"
-        )
+        try:
+            return await self._safe_call(
+                "/logic/api",
+                payload,
+                error_cls=UserError,
+                error_msg="Failed to get user preferences",
+            )
+        except PiazzaSDKError:
+            return {}
 
     async def update_user_preferences(self, preferences: dict[str, Any]) -> None:
         """Update the current user's preferences for this network.

@@ -40,15 +40,17 @@ class AnonymityLevel(StrEnum):
     """Anonymity level for post actions."""
 
     NO = "no"  # No anonymity (author shown)
-    YES = "yes"  # Anonymous to students (shown to instructors)
-    FULL = "full"  # Fully anonymous (instructors see only after resolution)
+    YES = "yes"  # Anonymous to students (shown to instructors, legacy)
+    FULL = "full"  # Fully anonymous (instructors see only after resolution, legacy)
+    STUD = "stud"  # Anonymous to students (primary value from API)
 
 
 class UserRole(StrEnum):
     """User role within a course network."""
 
     STUDENT = "student"  # Student enrolled in the course
-    INSTRUCTOR = "instructor"  # Course instructor
+    INSTRUCTOR = "instructor"  # Course instructor (legacy/alternate value)
+    PROFESSOR = "professor"  # Course instructor (primary value from API)
     TA = "ta"  # Teaching assistant
     ADMIN = "admin"  # Network administrator
 
@@ -58,6 +60,15 @@ class FeedSortOrder(StrEnum):
 
     UPDATED = "updated"  # Sort by most recently updated (newest first)
     CREATED = "created"  # Sort by creation time
+    ACTIVITY = "activity"  # Sort by activity level (default for instructor feed)
+    UNSORTED = "unsorted"  # No specific sort order
+    # Direction-suffixed variants (used in feed requests)
+    UPDATED_ASC = "updated_asc"  # Oldest updated first
+    UPDATED_DESC = "updated_desc"  # Newest updated first
+    CREATED_ASC = "created_asc"  # Oldest created first
+    CREATED_DESC = "created_desc"  # Newest created first
+    ACTIVITY_ASC = "activity_asc"  # Least active first
+    ACTIVITY_DESC = "activity_desc"  # Most active first
 
 
 class FeedItemType(StrEnum):
@@ -73,8 +84,9 @@ class FeedItemDefaultAnonymity(StrEnum):
     """Default anonymity setting for feed items."""
 
     NO = "no"  # No anonymity (author shown)
-    YES = "yes"  # Anonymous to students (shown to instructors)
-    FULL = "full"  # Fully anonymous (shown after resolution)
+    YES = "yes"  # Anonymous to students (shown to instructors, legacy)
+    FULL = "full"  # Fully anonymous (shown after resolution, legacy)
+    STUD = "stud"  # Anonymous to students (primary value from API)
     UNKNOWN = "unknown"  # Unknown/unrecognized setting
 
 
@@ -82,6 +94,7 @@ class PostStatus(StrEnum):
     """Status of a post."""
 
     ACTIVE = "active"  # Post is open for answers
+    PRIVATE = "private"  # Post visible only to instructors
     RESOLVED = "resolved"  # Post has been resolved
     SUPERSEDED = "superseded"  # Post replaced by another
 

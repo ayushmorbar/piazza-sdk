@@ -49,6 +49,7 @@ from piazza_sdk.models.feed import (
     Feed,
     FeedFilter,
     FeedItem,
+    FeedItemStat,
     FolderFilter,
     FollowingFilter,
     SearchBuilder,
@@ -56,7 +57,7 @@ from piazza_sdk.models.feed import (
     SortFilter,
     UnreadFilter,
 )
-from piazza_sdk.models.network import HallOfFameItem, NetworkInfo, Statistics
+from piazza_sdk.models.network import HallOfFameItem, NetworkInfo, Statistics, StatisticsStudents
 from piazza_sdk.models.post import (
     AssetUploadResponse,
     ChangeLogEntry,
@@ -115,6 +116,7 @@ __all__ = [
     "Feed",
     "FeedFilter",
     "FeedItem",
+    "FeedItemStat",
     "FolderFilter",
     "FollowingFilter",
     "HallOfFameItem",
@@ -127,6 +129,7 @@ __all__ = [
     "SearchFilter",
     "SortFilter",
     "Statistics",
+    "StatisticsStudents",
     "UnreadFilter",
     "User",
     "UserPreferences",

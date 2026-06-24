@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from piazza_sdk.auth import SessionConfig
-from piazza_sdk.models.enums import FeedItemDefaultAnonymity, FeedItemType, PostType, UserRole
+from piazza_sdk.models.enums import FeedItemDefaultAnonymity, FeedItemType, PostType
 from piazza_sdk.models.feed import FeedItem
 from piazza_sdk.models.post import Post
 from piazza_sdk.models.user import User
@@ -28,15 +28,7 @@ def session_config() -> SessionConfig:
 @pytest.fixture
 def sample_user() -> User:
     """Create a sample User for testing."""
-    return User(
-        id="user_123",
-        name="Test User",
-        email="user@example.com",
-        role=UserRole.STUDENT,
-        school="Test University",
-        major="Computer Science",
-        class_year="2025",
-    )
+    return User(id="user_123", name="Test User", email="user@example.com", role=["student"])
 
 
 @pytest.fixture
@@ -48,7 +40,7 @@ def sample_feed_item() -> FeedItem:
         type=FeedItemType.QUESTION,
         created=datetime(2025, 1, 15, 10, 30, tzinfo=UTC),
         updated=datetime(2025, 1, 15, 12, 45, tzinfo=UTC),
-        default_anonymity=FeedItemDefaultAnonymity.FALSE,
+        default_anonymity=FeedItemDefaultAnonymity.NO,
         uid="user_456",
         folder="Homework 1",
         no_answer=True,

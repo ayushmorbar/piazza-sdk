@@ -20,6 +20,7 @@ from piazza_sdk import (
     PermissionError,
     PiazzaSDKError,
     Post,
+    PostStatus,
     PostType,
     RateLimitError,
     SearchError,
@@ -62,6 +63,7 @@ class TestEnums:
         """Test UserRole enum."""
         assert UserRole.STUDENT.value == "student"
         assert UserRole.INSTRUCTOR.value == "instructor"
+        assert UserRole.PROFESSOR.value == "professor"
         assert UserRole.TA.value == "ta"
         assert UserRole.ADMIN.value == "admin"
 
@@ -69,6 +71,25 @@ class TestEnums:
         """Test FeedSortOrder enum."""
         assert FeedSortOrder.UPDATED.value == "updated"
         assert FeedSortOrder.CREATED.value == "created"
+        assert FeedSortOrder.ACTIVITY.value == "activity"
+        assert FeedSortOrder.UPDATED_ASC.value == "updated_asc"
+        assert FeedSortOrder.UPDATED_DESC.value == "updated_desc"
+        assert FeedSortOrder.ACTIVITY_ASC.value == "activity_asc"
+        assert FeedSortOrder.ACTIVITY_DESC.value == "activity_desc"
+
+    def test_anonymity_level(self):
+        """Test AnonymityLevel enum."""
+        assert AnonymityLevel.NO.value == "no"
+        assert AnonymityLevel.YES.value == "yes"
+        assert AnonymityLevel.FULL.value == "full"
+        assert AnonymityLevel.STUD.value == "stud"
+
+    def test_post_status(self):
+        """Test PostStatus enum."""
+        assert PostStatus.ACTIVE.value == "active"
+        assert PostStatus.PRIVATE.value == "private"
+        assert PostStatus.RESOLVED.value == "resolved"
+        assert PostStatus.SUPERSEDED.value == "superseded"
 
 
 class TestModels:
@@ -80,7 +101,7 @@ class TestModels:
             "id": "user123",
             "name": "Test User",
             "email": "test@example.com",
-            "role": "student",
+            "role": ["student"],
             "is_instructor": False,
             "is_student": True,
             "is_ta": False,
@@ -174,13 +195,14 @@ class TestModels:
     def test_change_log_entry_model(self):
         """Test ChangeLogEntry model."""
         change_data = {
+            "id": "ch123",
             "anon": "no",
             "uid": "user123",
             "data": None,
             "to": None,
             "v": "public",
             "type": "create",
-            "when": datetime.now(),
+            "when": "1609459200000",
             "cid": "cid123",
         }
         change = ChangeLogEntry(**change_data)

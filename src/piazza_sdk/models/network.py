@@ -43,36 +43,135 @@ class NetworkInfo(BaseModel):
     status: str | None = Field(default=None, description="Network status string (e.g. active)")
 
 
-class Statistics(BaseModel):
-    """Course network statistics.
+class StatisticsStudents(BaseModel):
+    """Student engagement statistics.
 
     Attributes:
-        posts: Total number of posts.
-        resolved: Number of resolved questions.
-        unresolved: Number of unresolved questions.
-        users: Total users participating.
-        instructors: Number of instructors.
-        students: Number of students.
-        total_views: Aggregate view count.
-        total_endorsements: Aggregate endorsement count.
+        total: Total number of students.
+        viewed: Number of students who viewed posts.
+        viewed_answered: Number of students who viewed and answered.
+        viewed_instructor_note: Number of students who viewed instructor notes.
     """
 
     model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
 
-    posts: int = Field(default=0, description="Total number of posts")
-    resolved: int = Field(default=0, description="Number of resolved questions")
-    unresolved: int = Field(default=0, description="Number of unresolved questions")
-    users: int = Field(default=0, description="Total users participating")
-    instructors: int = Field(default=0, description="Number of instructors")
-    students: int = Field(default=0, description="Number of students")
-    total_views: int = Field(default=0, description="Aggregate view count")
-    total_endorsements: int = Field(default=0, description="Aggregate endorsement count")
+    total: int = Field(default=0, description="Total number of students")
+    viewed: int = Field(default=0, description="Number of students who viewed posts")
+    viewed_answered: int = Field(default=0, description="Students who viewed and answered")
+    viewed_instructor_note: int = Field(
+        default=0, description="Students who viewed instructor notes"
+    )
 
-    @property
-    def resolution_rate(self) -> float:
-        """Percentage of questions that are resolved."""
-        total = self.resolved + self.unresolved
-        return (self.resolved / total * 100) if total > 0 else 0.0
+
+class StatisticsUser(BaseModel):
+    """A single user entry from network statistics.
+
+    Attributes:
+        user_id: Piazza user ID.
+        name: Display name.
+        email: User email.
+        days: Days active.
+        posts: Number of posts.
+        asks: Number of questions asked.
+        answers: Number of answers given.
+        views: Number of views.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    user_id: str = Field(default="", description="Piazza user ID")
+    name: str = Field(default="", description="Display name")
+    email: str = Field(default="", description="User email")
+    lti_ids: list[str] = Field(default_factory=list, description="LTI identifiers")
+    days: int = Field(default=0, description="Days active")
+    posts: int = Field(default=0, description="Number of posts")
+    asks: int = Field(default=0, description="Number of questions asked")
+    answers: int = Field(default=0, description="Number of answers given")
+    views: int = Field(default=0, description="Number of views")
+
+
+class StatisticsTotals(BaseModel):
+    """Aggregate totals from network statistics.
+
+    Attributes:
+        posts: Total posts.
+        questions: Total questions.
+        i_answers: Instructor answers.
+        s_answers: Student answers.
+        net_time: Net response time.
+        anon_pool: Anonymous pool size.
+        response_time: Average response time.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    posts: int = Field(default=0, description="Total posts")
+    questions: int = Field(default=0, description="Total questions")
+    i_answers: int | None = Field(default=None, description="Instructor answers")
+    s_answers: int | None = Field(default=None, description="Student answers")
+    net_time: int | None = Field(default=None, description="Net response time")
+    anon_pool: int = Field(default=0, description="Anonymous pool size")
+    response_time: float | None = Field(default=None, description="Average response time")
+
+
+class StatisticsDaily(BaseModel):
+    """Daily activity breakdown.
+
+    Attributes:
+        day: Date string (e.g. "06/24").
+        users: Number of users that day.
+        posts: Number of posts that day.
+        questions: Number of questions that day.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    day: str = Field(default="", description="Date string")
+    users: int | None = Field(default=None, description="Number of users that day")
+    posts: int = Field(default=0, description="Number of posts that day")
+    questions: int = Field(default=0, description="Number of questions that day")
+
+
+class Statistics(BaseModel):
+    """Course network statistics from /main/api network.get_stats.
+
+    Attributes:
+        daily: Daily activity breakdown.
+        users: User statistics list.
+        profs: Instructor statistics list.
+        total: Aggregate totals.
+        top_users: Top contributing users.
+        top_askers: Top question askers.
+        top_answerers: Top answer providers.
+        top_listeners: Top listeners.
+        top_good_q: Top good questions.
+        top_good_a: Top good answers.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    daily: list[StatisticsDaily] = Field(
+        default_factory=list, description="Daily activity breakdown"
+    )
+    users: list[StatisticsUser] = Field(default_factory=list, description="User statistics list")
+    profs: list[StatisticsUser] = Field(
+        default_factory=list, description="Instructor statistics list"
+    )
+    total: StatisticsTotals = Field(
+        default_factory=StatisticsTotals, description="Aggregate totals"
+    )
+    top_users: list[StatisticsUser] = Field(
+        default_factory=list, description="Top contributing users"
+    )
+    top_askers: list[StatisticsUser] = Field(
+        default_factory=list, description="Top question askers"
+    )
+    top_answerers: list[StatisticsUser] = Field(
+        default_factory=list, description="Top answer providers"
+    )
+    top_listeners: list[StatisticsUser] = Field(default_factory=list, description="Top listeners")
+    top_good_q: list[StatisticsUser] = Field(default_factory=list, description="Top good questions")
+    top_good_a: list[StatisticsUser] = Field(default_factory=list, description="Top good answers")
 
 
 class HallOfFameItem(BaseModel):

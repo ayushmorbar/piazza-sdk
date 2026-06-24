@@ -28,9 +28,10 @@ class Endorsement(BaseModel):
         published: Whether the endorsement is published.
         us: Whether the endorser is a course staff member.
         facebook_id: Facebook ID of the endorser, if linked.
+        tag: Endorsement tag (e.g. ``"good"``, ``"great"``).
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     role: str = Field(default="", description="Endorser's role (e.g. student, instructor)")
     name: str = Field(default="", description="Endorser display name")
@@ -46,24 +47,28 @@ class Endorsement(BaseModel):
     facebook_id: str | None = Field(
         default=None, description="Facebook ID of the endorser, if linked"
     )
+    tag: str | None = Field(default=None, description="Endorsement tag (e.g. good, great)")
 
 
 class ChangeLogEntry(BaseModel):
     """An entry in a post's change log.
 
     Attributes:
+        id: Unique identifier for this change log entry.
         anon: Anonymity level of the change author.
         uid: User ID of the person who made the change.
         data: Free-form data associated with the change.
         to: Target value after the change, if applicable.
         v: Visibility of the change record.
         type: Type of change (create, update, endorse, etc.).
-        when: Timestamp when the change occurred.
+        when: Timestamp when the change occurred (string or epoch ms).
         cid: Child element ID the change relates to, if any.
+        edited: Whether this entry represents an edit.
     """
 
     model_config = ConfigDict(slots=True, populate_by_name=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
+    id: str = Field(default="", description="Unique identifier for this change log entry")
     anon: AnonymityLevel = Field(
         default=AnonymityLevel.NO, description="Anonymity level of the change author"
     )
@@ -76,10 +81,11 @@ class ChangeLogEntry(BaseModel):
         alias="n",
         description="Type of change (create, update, endorse, etc.)",
     )
-    when: datetime | None = Field(
+    when: str | None = Field(
         default=None, alias="t", description="Timestamp when the change occurred"
     )
     cid: str = Field(default="", description="Child element ID the change relates to, if any")
+    edited: bool = Field(default=False, description="Whether this entry represents an edit")
 
 
 class PostRevision(BaseModel):
@@ -152,6 +158,10 @@ class Child(BaseModel):
         anon: Anonymity level of the author.
         no_answer: Whether this follow-up has no answer yet.
         followed: Whether the current user is following this element.
+        role: Author role(s).
+        instructor: Whether authored by an instructor.
+        endorsers: List of users who endorsed this element.
+        uid_unique: Unique registration identifier for the user.
     """
 
     model_config = ConfigDict(slots=True, populate_by_name=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
@@ -173,6 +183,14 @@ class Child(BaseModel):
     no_answer: bool = Field(default=False, description="Whether this follow-up has no answer yet")
     followed: bool = Field(
         default=False, description="Whether the current user is following this element"
+    )
+    role: list[str] = Field(default_factory=list, description="Author role(s)")
+    instructor: bool | None = Field(default=None, description="Whether authored by an instructor")
+    endorsers: list[dict[str, Any]] | None = Field(
+        default=None, description="List of users who endorsed this element"
+    )
+    uid_unique: str | None = Field(
+        default=None, description="Unique registration identifier for the user"
     )
 
 
@@ -287,6 +305,8 @@ class PostConfig(BaseModel):
         has_emails_sent: Whether notification emails have been sent for this post.
         is_default: Whether this post uses default configuration.
         schedule_later_time: Scheduled time for later posting, if any.
+        allow_anon: Whether anonymous posting is allowed.
+        schedule_later: Whether the post is scheduled for later.
     """
 
     model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
@@ -295,6 +315,8 @@ class PostConfig(BaseModel):
     has_emails_sent: bool = Field(default=False, description="Whether emails have been sent")
     is_default: bool = Field(default=True, description="Whether this is default config")
     schedule_later_time: str | None = Field(default=None, description="Scheduled post time")
+    allow_anon: bool = Field(default=False, description="Whether anonymous posting is allowed")
+    schedule_later: bool = Field(default=False, description="Whether post is scheduled for later")
 
 
 class Post(BaseModel):
@@ -404,6 +426,19 @@ class Post(BaseModel):
         default=Visibility.PUBLIC, description="Access level (public, instructors, group)"
     )
     revisions: list[PostRevision] = Field(default_factory=list, description="Full revision history")
+    enhanced: dict[str, Any] | None = Field(default=None, description="Enhanced content data")
+    bumped: bool = Field(default=False, description="Whether the post has been bumped")
+    bm_type: str | None = Field(default=None, description="Bookmark type")
+    bm_visible: bool | None = Field(default=None, description="Bookmark visibility")
+    request_instructor_response: bool = Field(
+        default=False, description="Whether instructor response is requested"
+    )
+    request_all_instructor_response: bool = Field(
+        default=False, description="Whether all instructors are requested to respond"
+    )
+    clobber: str | None = Field(default=None, description="Clobber state")
+    user_endorse: dict[str, Any] | None = Field(default=None, description="User endorsement data")
+    tag: str | None = Field(default=None, description="Post tag")
 
     # Backward compat: expose first folder as scalar property
     @property
@@ -534,6 +569,10 @@ class Post(BaseModel):
                     anon=c.anon,
                     no_answer=c.no_answer,
                     followed=c.followed,
+                    role=c.role,
+                    instructor=c.instructor,
+                    endorsers=c.endorsers,
+                    uid_unique=c.uid_unique,
                 )
                 for c in self.children
             ],
@@ -549,6 +588,15 @@ class Post(BaseModel):
                 )
                 for r in self.revisions
             ],
+            enhanced=self.enhanced,
+            bumped=self.bumped,
+            bm_type=self.bm_type,
+            bm_visible=self.bm_visible,
+            request_instructor_response=self.request_instructor_response,
+            request_all_instructor_response=self.request_all_instructor_response,
+            clobber=self.clobber,
+            user_endorse=self.user_endorse,
+            tag=self.tag,
         )
 
 

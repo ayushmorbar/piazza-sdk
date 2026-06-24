@@ -22,6 +22,7 @@ from piazza_sdk.models.feed import (
     Feed,
     FeedFilter,
     FeedItem,
+    FeedItemStat,
     FolderFilter,
     FollowingFilter,
     SearchBuilder,
@@ -29,7 +30,7 @@ from piazza_sdk.models.feed import (
     SortFilter,
     UnreadFilter,
 )
-from piazza_sdk.models.network import HallOfFameItem, NetworkInfo, Statistics
+from piazza_sdk.models.network import HallOfFameItem, NetworkInfo, Statistics, StatisticsStudents
 from piazza_sdk.models.post import (
     Answer,
     AssetUploadResponse,
@@ -58,6 +59,7 @@ __all__ = [
     "FeedFilter",
     "FeedItem",
     "FeedItemDefaultAnonymity",
+    "FeedItemStat",
     "FeedItemType",
     "FeedSortOrder",
     "FolderFilter",
@@ -80,6 +82,7 @@ __all__ = [
     "SortField",
     "SortFilter",
     "Statistics",
+    "StatisticsStudents",
     "StudentInfo",
     "UnreadFilter",
     "User",

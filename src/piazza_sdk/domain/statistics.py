@@ -33,16 +33,7 @@ async def get_statistics(rpc: RPC, *, session: SessionStateManager | None = None
     """
     try:
         raw = await rpc.get_stats()
-        return Statistics(
-            posts=raw.get("posts", 0),
-            resolved=raw.get("resolved", 0),
-            unresolved=raw.get("unresolved", 0),
-            users=raw.get("users", 0),
-            instructors=raw.get("instructors", 0),
-            students=raw.get("students", 0),
-            total_views=raw.get("total_views", 0),
-            total_endorsements=raw.get("total_endorsements", 0),
-        )
+        return Statistics.model_validate(raw, extra="ignore")
     except PiazzaSDKError:
         raise
     except Exception as exc:

@@ -10,6 +10,34 @@ from pydantic import BaseModel, ConfigDict, Field
 from piazza_sdk.models.enums import FeedItemDefaultAnonymity, FeedItemType, FeedSortOrder
 
 
+class FeedItemStat(BaseModel):
+    """Nested statistics for a feed item.
+
+    Attributes:
+        total: Total number of students who can see this post.
+        unread: Number of students who haven't read this post.
+        students: Number of students who have viewed this post.
+        unresolved: Number of unresolved follow-ups.
+        instructor_note: Whether this is an instructor note.
+        my_returned: Whether the current user has a returned item.
+        my_synthesis: Whether the current user has synthesis available.
+        my_feedback: Whether the current user has feedback.
+        my_replies: Number of replies to the current user.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    total: int = Field(default=0, description="Total students who can see this post")
+    unread: int = Field(default=0, description="Students who haven't read this post")
+    students: int = Field(default=0, description="Students who have viewed this post")
+    unresolved: int = Field(default=0, description="Unresolved follow-ups")
+    instructor_note: bool = Field(default=False, description="Whether this is an instructor note")
+    my_returned: bool = Field(default=False, description="Whether current user has returned item")
+    my_synthesis: bool = Field(default=False, description="Whether current user has synthesis")
+    my_feedback: bool = Field(default=False, description="Whether current user has feedback")
+    my_replies: int = Field(default=0, description="Number of replies to current user")
+
+
 class FeedItem(BaseModel):
     """A single item in a Piazza feed response.
 
@@ -30,9 +58,10 @@ class FeedItem(BaseModel):
         viewed: Whether the current user has viewed this post.
         reputation: Author's reputation score.
         badge: Author's badge or role indicator.
-        tags: List of tags on the post.
+        tag: Tag on the post (singular string).
         content_snippet: Short content preview (serialized as ``content_snipet``,
             note the misspelling in Piazza's API).
+        stat: Nested statistics for this feed item.
     """
 
     model_config = ConfigDict(slots=True, populate_by_name=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
@@ -62,13 +91,15 @@ class FeedItem(BaseModel):
     badge: str = Field(default="", description="Author badge or role indicator")
     bucket_name: str = Field(default="", description="Bucket name (e.g. Pinned)")
     bucket_order: int = Field(default=0, description="Bucket ordering")
-    tags: list[str] = Field(default_factory=list, description="Post tags")
+    tag: str | None = Field(default=None, description="Post tag (singular)")
     content_snippet: str | None = Field(
         default=None, alias="content_snipet", description="Short content preview"
     )
     log: list[dict[str, Any]] = Field(
         default_factory=list, alias="change_log", description="Change log entries"
     )
+    stat: FeedItemStat | None = Field(default=None, description="Feed item statistics")
+    folder_num: int = Field(default=0, description="Folder number")
 
     @property
     def is_question(self) -> bool:

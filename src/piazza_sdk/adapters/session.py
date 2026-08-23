@@ -283,7 +283,16 @@ class SessionStateManager:
         """
         if self._cookie_path is None:
             return False
-        return await self._cookies.load(self._cookie_path)
+        loaded = await self._cookies.load(self._cookie_path)
+        if loaded and self._cookies.cookies:
+            self._state = SessionState.AUTHENTICATED
+            if self._client is not None:
+                for name, value in self._cookies.cookies.items():
+                    self._client.cookies.set(name, value)
+                if self._cookies.csrf_token:
+                    self._client.headers["csrf-token"] = self._cookies.csrf_token
+            return True
+        return False
 
     async def logout(self) -> None:
         """Terminate the current session and release all resources.
@@ -321,7 +330,7 @@ class SessionStateManager:
             from piazza_sdk.adapters.http import RPC  # noqa: PLC0415
 
             rpc = RPC(session=self, base_url=self.config.base_url, network_id="0")
-            await rpc.get_unread_message_count()
+            await rpc.memo_get_unread_message_count()
             return True
         except Exception:  # noqa: BLE001
             logger.debug("Session alive check failed", exc_info=True)

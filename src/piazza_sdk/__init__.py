@@ -14,7 +14,8 @@ from piazza_sdk._version import __version__, version
 from piazza_sdk.api.network import Network
 from piazza_sdk.api.piazza import Piazza
 from piazza_sdk.api.rpc import RPC
-from piazza_sdk.auth import CookieJar, SessionConfig, SessionState, SessionStateManager
+from piazza_sdk.auth import CookieJar, SessionState, SessionStateManager
+from piazza_sdk.config import PiazzaConfig, SessionConfig
 from piazza_sdk.exceptions import (
     AuthenticationError,
     ContentError,
@@ -73,7 +74,7 @@ from piazza_sdk.models.user import User, UserPreferences
 PiazzaSession = SessionStateManager
 
 __all__ = [
-    # Core
+    "PiazzaConfig",
     "SessionConfig",
     "SessionState",
     "SessionStateManager",

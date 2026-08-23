@@ -1021,3 +1021,363 @@ When code and this table disagree, trust the table and file a bug.
 | **Nested payloads** | Real posts carry config keys beyond the model surface (e.g. `config.feed_groups`). Server-fed nested models (`PostConfig`, `Answer`, `PostRevision`) therefore ignore unknown keys instead of rejecting them. |
 | **Retries** | 429 and 5xx responses ARE retried (exponential backoff honoring `Retry-After`); typed exceptions survive retries via reraise, preserving `retry_after_ms` / `status_code`. |
 | **Feed** | `network.get_my_feed` result includes `total`; Hall-of-Fame data lives at `result.hof.best_answer` after single envelope unwrap. |
+
+
+---
+
+## Live-Verified Wire Contracts (HAR Captures)
+
+# Piazza API: Post Query Data Dictionary
+
+This document describes the **observed post payloads** returned by Piazza’s current web app traffic captured in the supplied HAR files:
+
+- `piazza.com_redacted(1).har`
+- `piazza.com2.har`
+
+The goal here is to document the **raw response shape** as it appears in Piazza traffic, while keeping the structure useful for SDK/model design. Where the HARs show variation, the field is marked as optional or noted as “observed on some posts”.
+
+---
+
+## 1) Core post object
+
+`content.get` returns a nested dictionary for a single thread/post.
+
+### Top-level post fields
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `str` | Unique thread/post identifier. |
+| `folders` | `list[str]` | Folder path(s) for the post. Usually empty or a single folder name. |
+| `nr` | `int` | Numeric post number / thread number. |
+| `data` | `dict` | Legacy container; observed as `{"embed_links": []}`. |
+| `created` | `str` | ISO-8601 timestamp string (`YYYY-MM-DDTHH:MM:SSZ`). |
+| `bucket_order` | `int` | Feed bucket ordering. Pinned posts observed with `0`. |
+| `bucket_name` | `str` | Bucket label such as `Pinned` or `Today`. |
+| `no_answer_followup` | `int` | Count of unresolved / unanswered follow-ups. |
+| `history_size` | `int` | Number of history entries captured for the post. |
+| `history` | `list[dict]` | Full post history objects. |
+| `change_log` | `list[dict]` | Change log entries for the thread. |
+| `type` | `str` | Thread type: commonly `note`, `question`, or `poll`. |
+| `tags` | `list[str]` | Internal tags, e.g. `pin`, `student`, instructor/category tags. |
+| `tag_good` | `list[dict]` | Endorsement records for the thread. |
+| `tag_good_arr` | `list[str]` | Endorser IDs associated with the thread/child items. |
+| `children` | `list[dict]` | Recursive child tree (follow-ups / feedback / replies). |
+| `followup_summary` | `dict` | Observed on some posts; usually a compact summary object (often empty). |
+| `unique_views` | `int` | Unique viewer count. |
+| `anon_map` | `dict` | Anonymous alias mapping observed in some posts. |
+| `anon_icons` | `bool` | UI/metadata flag observed in some responses. |
+| `uid` | `str` | Author user ID (may be omitted in some contexts, depending on visibility and client). |
+| `status` | `str` | Raw status string; observed as `active` in the HARs. Older clients may also surface `inactive`. |
+| `drafts` | `dict` | Draft state for the post; may be empty or contain per-editor draft data. |
+| `request_instructor` | `int` | Number of instructors explicitly requested/tagged in the thread. |
+| `request_instructor_me` | `bool` | Whether the current instructor account is tagged/requested. |
+| `bookmarked` | `int` | Bookmark/follow count. |
+| `num_favorites` | `int` | Favorite count. |
+| `my_favorite` | `bool` | Whether the current user has favorited the thread. |
+| `is_bookmarked` | `bool` | Whether the current user has bookmarked/followed the thread. |
+| `is_pinned` | `bool` | Whether the thread is pinned. |
+| `is_tag_good` | `bool` | Whether the current user has endorsed the thread. |
+| `q_edits` | `list[dict]` | Legacy/empty edit list; not populated in the HARs. |
+| `i_edits` | `list[dict]` | Legacy/empty instructor edit list; not populated in the HARs. |
+| `s_edits` | `list[dict]` | Legacy/empty student edit list; not populated in the HARs. |
+| `t` | `int` | Large integer token observed in responses; appears to be a timestamp-like internal value. |
+| `default_anonymity` | `str` | Raw anonymity setting. Observed as `"no"` in the HARs. |
+
+---
+
+## 2) Change log entries
+
+The `change_log` array contains per-change records.
+
+### `ChangeLogEntry`
+
+| Field | Type | Notes |
+|---|---|---|
+| `anon` | `str` | Anonymous label such as `"no"` or an alias. |
+| `uid_a` | `str \| None` | Anonymous user token/alias identifier; not always present. |
+| `uid` | `str` | Internal user ID of the contributor. |
+| `data` | `str \| None` | Only present for initial creation entries; content hash / payload marker. |
+| `to` | `str \| None` | Target thread ID (seen in some historical shapes). |
+| `v` | `str` | Visibility marker; observed as `all` in the HARs. |
+| `type` | `str` | Change type: `create`, `followup`, `feedback`, `i_answer`, `s_answer`. |
+| `when` | `str` | ISO-8601 timestamp string. |
+| `cid` | `str` | Child ID linked to the change entry. |
+
+**Observed HAR example**
+```json
+{
+  "anon": "no",
+  "uid": "llo5jk902ie31e",
+  "data": "mmj6vi4pnl05t",
+  "v": "all",
+  "type": "create",
+  "when": "2026-03-09T13:00:26Z"
+}
+```
+
+---
+
+## 3) History entries
+
+The `history` array stores the visible revision history of the thread content.
+
+### `HistoryEntry`
+
+| Field | Type | Notes |
+|---|---|---|
+| `anon` | `str` | Anonymous label / visibility alias. |
+| `uid` | `str` | Internal user ID of the editor. |
+| `subject` | `str` | Subject line at that revision. |
+| `created` | `str` | ISO-8601 timestamp for the revision. |
+| `content` | `str` | HTML body content at that revision. |
+| `uid_a` | `str \| None` | Not observed in the sample payloads, but may appear for anonymous history records. |
+
+**Observed HAR example**
+```json
+{
+  "anon": "no",
+  "uid": "llo5jk902ie31e",
+  "subject": "Homework Re-Grade Requests",
+  "created": "2026-03-09T13:00:26Z",
+  "content": "<p>Hi students, ...</p>"
+}
+```
+
+---
+
+## 4) Endorsements
+
+The `tag_good` array contains endorsement metadata.
+
+### `Endorsement`
+
+| Field | Type | Notes |
+|---|---|---|
+| `role` | `str` | Usually `student` or `instructor` (TA/admin variants can appear in related user payloads). |
+| `name` | `str` | Public display name. |
+| `endorser` | `dict` | Nested endorser object; observed as `{}` in some captured posts. |
+| `admin` | `bool` | Whether the endorser is an admin. |
+| `photo` | `str \| None` | Photo filename, if present. |
+| `id` | `str` | Endorser user ID. |
+| `photo_url` | `str \| None` | Public CDN URL for the profile photo. |
+| `published` | `bool` | Whether the endorsement is publicly published. |
+| `us` | `bool` | Internal staff/user flag (exact semantics unclear). |
+| `facebook_id` | `str \| None` | Linked Facebook ID, if any. |
+
+**Observed HAR example**
+```json
+{
+  "role": "student",
+  "name": "Peace Bakare",
+  "endorser": {},
+  "admin": false,
+  "photo": "46dc2e68-758c-407c-96b7-0b7fa5b21cc3_200.jpg",
+  "id": "lz07msebcme2si",
+  "photo_url": "https://cdn-uploads.piazza.com/photos/lz07msebcme2si/46dc2e68-758c-407c-96b7-0b7fa5b21cc3_200.jpg",
+  "published": true,
+  "us": false,
+  "facebook_id": null
+}
+```
+
+---
+
+## 5) Thread config
+
+The `config` object varies by post and editor context. The HARs show a few concrete shapes.
+
+### Observed keys
+
+| Field | Type | Notes |
+|---|---|---|
+| `editor` | `str` | Editor mode observed as `rte`. |
+| `has_emails_sent` | `int \| bool` | Flag indicating whether notification emails were sent. |
+| `is_default` | `int \| bool` | Observed on one post as `1`. |
+| `schedule_later_time` | `int | None` | Unix epoch milliseconds for scheduled publication. |
+| `feed_groups` | `str | list[str] \| None` | Seen in older reverse-engineered docs; not observed in the two HARs here, but likely context-dependent. |
+| `must_read_version` | `int | None` | Historical/legacy field from older docs. |
+| `seen` | `dict[str, int] | None` | Historical/legacy read-tracking map. |
+
+### Observed HAR examples
+
+```json
+{"is_default": 1}
+```
+
+```json
+{
+  "schedule_later_time": 1773061200000,
+  "editor": "rte",
+  "has_emails_sent": 1
+}
+```
+
+---
+
+## 6) Child tree
+
+The `children` field is recursive. Piazza uses nested child objects for follow-ups and replies/feedback.
+
+### `Child` (generic recursive node)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `str \| None` | Child ID; present in some child shapes. |
+| `uid` | `str` | Author user ID. |
+| `anon` | `str` | Anonymous label / alias. |
+| `subject` | `str` | Child subject or comment text. |
+| `content` | `str \| None` | HTML body when present. |
+| `created` | `str` | ISO-8601 timestamp. |
+| `updated` | `str \| None` | Last update time if available. |
+| `folders` | `list[str] \| None` | Usually empty in the observed historical docs. |
+| `data` | `dict \| None` | Legacy embed-link container. |
+| `bucket_order` | `int | None` | Inherited/attached feed bucket index. |
+| `bucket_name` | `str \| None` | Inherited/attached feed bucket label. |
+| `no_upvotes` | `int | None` | Upvote count for follow-up/comment-shaped nodes. |
+| `tag_good` | `list[dict] \| None` | Endorsement records. |
+| `tag_good_arr` | `list[str] \| None` | Endorser IDs. |
+| `config` | `dict \| None` | Child-specific config payload. |
+| `children` | `list[dict] \| None` | Recursive nested children. |
+
+### Notes
+- The old reverse-engineered docs split this into `followup_children_dict` and `feedback_children_dict`.
+- The HARs confirm that nested child trees exist, but they do not fully expose all child shapes in the captured samples because some threads had empty `children`.
+
+---
+
+## 7) Post-level fields worth keeping
+
+These are all returned by current `content.get` responses and should stay in the canonical model.
+
+| Field | Type | Why it matters |
+|---|---|---|
+| `history_size` | `int` | Indicates whether the thread has revision history. |
+| `no_answer_followup` | `int` | Useful for unresolved-thread triage. |
+| `followup_summary` | `dict` | Helpful compact summary, present on some posts. |
+| `anon_map` | `dict` | Important for anonymous-thread reconstruction. |
+| `anon_icons` | `bool` | UI metadata that can help preserve display semantics. |
+| `drafts` | `dict` | Signals autosave / draft recovery support. |
+| `request_instructor` | `int` | Useful for staff triage and workload dashboards. |
+| `request_instructor_me` | `bool` | Important when the current staff member is directly requested. |
+| `bookmarked` | `int` | Bookmark popularity / follow count. |
+| `num_favorites` | `int` | Favorite count. |
+| `my_favorite` | `bool` | User-specific state. |
+| `is_bookmarked` | `bool` | User-specific state. |
+| `is_pinned` | `bool` | UI state. |
+| `is_tag_good` | `bool` | User-specific endorsement state. |
+| `t` | `int` | Internal timestamp-like token. |
+| `default_anonymity` | `str` | Raw anonymity setting. |
+
+---
+
+## 8) Related RPCs observed in the HARs
+
+These are not post fields, but they help explain how the data is produced and mutated.
+
+| RPC | Observed result shape | Notes |
+|---|---|---|
+| `content.get` | Full post dictionary | Main post fetch endpoint. |
+| `content.auto_save` | `"OK"` | Autosave / draft persistence. |
+| `content.edit` | string ID | Returns a content/edit identifier. |
+| `content.cancel_edit` | `"OK"` | Cancels an in-progress edit. |
+| `content.bookmark` / `content.unbookmark` | `"OK"` | Bookmark/unbookmark thread. |
+| `content.mark_favorite` / `content.mark_unfavorite` | `"OK"` | Favorite/unfavorite thread. |
+| `content.add_feedback` / `content.remove_feedback` | `"OK"` | Add/remove feedback/endorsement-like actions. |
+| `generic.sanitize_html` | `{"main": "<p>...</p>"}` | HTML sanitization result. |
+| `network.get_instructor_stats` | stats dict | Includes unanswered questions, response time, and contribution counts. |
+| `network.get_all_users` | `list[dict]` | Returns user records for the whole network. |
+| `network.get_users` | `list[dict]` | Returns specific user records. |
+| `network.get_online_users` | `{"users": int}` | Online user count. |
+| `network.get_my_feed` | feed wrapper dict | Feed listing with `feed`, `more`, `sort`, `live`, and other metadata. |
+| `network.filter_feed` | feed wrapper dict | Filtered feed results. |
+| `network.search` | list of lightweight thread dicts | Search result rows with compressed thread fields. |
+
+---
+
+## 9) Lightweight search / feed shapes
+
+The HARs also expose lighter-weight representations used by feed/search endpoints.
+
+### Search result row
+
+Observed `network.search` rows contain fields like:
+
+- `folders`
+- `nr`
+- `main_version`
+- `request_instructor`
+- `log`
+- `subject`
+- `bucket_order`
+- `no_answer_followup`
+- `bucket_name`
+- `num_favorites`
+- `type`
+- `tags`
+- `tag_good_prof`
+- `gd_f`
+- `unique_views`
+- `content_snipet` (note the misspelling)
+- `view_adjust`
+- `modified`
+- `id`
+- `gd`
+- `updated`
+- `status`
+- `uv`
+- `naf`
+- `fol`
+- `na`
+- `pin`
+- `u`
+- `v`
+- `va`
+- `m`
+- `rq`
+- `highlighted_snipet`
+- `version`
+- `is_new`
+- `book`
+- `labels`
+- `sort_order`
+
+### Feed wrapper
+
+Observed `network.filter_feed` / `network.get_my_feed` wrappers include keys such as:
+
+- `feed`
+- `t`
+- `more`
+- `sort`
+- `live`
+
+`network.get_my_feed` also includes additional account/feed metadata such as `drafts`, `tags`, `notifications`, `hof`, `token_data`, `has_live_posts`, and user/network counters.
+
+---
+
+## 10) Suggested model guidance
+
+For a current SDK, the safest approach is:
+
+1. Keep a **lossless raw post model** that preserves every field Piazza returns.
+2. Build a **normalized domain model** on top of it for convenient use.
+3. Treat unknown fields as forward-compatible rather than forbidden when parsing raw Piazza responses.
+
+A good raw model should preserve:
+
+- `anon_map`
+- `followup_summary`
+- `drafts`
+- `is_pinned`
+- `request_instructor`
+- `request_instructor_me`
+- `bookmarked`
+- `num_favorites`
+- `my_favorite`
+- `is_bookmarked`
+- `is_tag_good`
+- `t`
+- `default_anonymity`
+
+and should leave room for future fields without breaking parsing.
+

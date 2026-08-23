@@ -13,12 +13,9 @@ import logging
 import os
 from enum import Enum
 from pathlib import Path  # noqa: TC003 - needed at runtime for Pydantic model_rebuild
-from typing import Any
-from urllib.parse import urlparse
 
 from cryptography.fernet import Fernet, InvalidToken
-from pydantic import BaseModel, Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field
 
 from piazza_sdk.exceptions import PiazzaSDKError
 
@@ -215,80 +212,3 @@ class CookieJar(BaseModel):
         except (json.JSONDecodeError, KeyError) as exc:
             logger.warning("Failed to parse cookie file %s: %s", path, exc)
         return False
-
-
-class SessionConfig(BaseSettings):
-    """Configuration for a Piazza SDK session.
-
-    Supports loading from environment variables with the ``PIAZZA_`` prefix
-    (e.g. ``PIAZZA_COURSE_ID``, ``PIAZZA_TIMEOUT``). Explicit constructor
-    arguments always take precedence over environment variables.
-
-    Attributes:
-        course_id: The Piazza course/network ID.
-        user_agent: Custom User-Agent string.
-        base_url: Base URL for the Piazza API.
-        timeout: HTTP request timeout in seconds.
-        retries: Number of retry attempts for transient failures.
-        retry_delay: Base delay between retries in seconds.
-        cookie_path: Path for persisting cookies to disk.
-        encryption_key: Fernet key for encrypting persisted cookies.
-    """
-
-    model_config = {"env_prefix": "PIAZZA_"}
-
-    course_id: str
-    user_agent: str = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/125.0.0.0 Safari/537.36"
-    )
-    sec_ch_ua_platform: str = "Windows"
-    base_url: str = PIAZZA_BASE_URL
-    timeout: float = 30.0
-    retries: int = 3
-    retry_delay: float = 1.0
-    cookie_path: Path | None = None
-    encryption_key: str | None = None
-
-    @field_validator("encryption_key")
-    @classmethod
-    def _validate_fernet_key(cls, v: str | None) -> str | None:
-        """Validate that the encryption key is a valid Fernet key."""
-        if v is None:
-            return v
-        try:
-            Fernet(v.encode() if isinstance(v, str) else v)
-        except Exception as e:
-            raise ValueError(
-                f"Invalid Fernet encryption key: {e}. "
-                "Generate a valid key with: from cryptography.fernet import Fernet; "
-                "print(Fernet.generate_key().decode())"
-            ) from e
-        return v
-
-    def model_post_init(self, __context: Any) -> None:
-        """Validate and enforce HTTPS on base_url."""
-        if self.base_url:
-            parsed = urlparse(self.base_url)
-            if parsed.scheme != "https":
-                # Rebuild URL with HTTPS scheme
-                self.base_url = parsed._replace(scheme="https").geturl()
-
-    @property
-    def login_page_url(self) -> str:
-        """Full URL for the login page (GET to capture CSRF token)."""
-        return f"{self.base_url.rstrip('/')}/account/login"
-
-    @property
-    def login_url(self) -> str:
-        """Full login POST URL for credential submission."""
-        return f"{self.base_url.rstrip('/')}/class"
-
-    @property
-    def network_base_url(self) -> str:
-        """Base URL for network API calls."""
-        return f"{self.base_url.rstrip('/')}/network"
-
-
-SessionConfig.model_rebuild()

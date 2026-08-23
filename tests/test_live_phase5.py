@@ -152,3 +152,61 @@ async def test_student_login_and_feed():
         await session.logout()
         assert session.state == SessionState.CLOSED
         logger.info("✓ Logout OK")
+
+
+@live
+@requires_instructor_creds
+@requires_student_creds
+@pytest.mark.asyncio
+async def test_cross_role_interaction():
+    """Dual-Role: Student creates a post → Instructor answers and endorses it
+    → Instructor deletes it.
+    """
+    # 1. Student creates a post
+    student_config = SessionConfig(course_id=COURSE_ID)
+    async with SessionStateManager(student_config) as student_session:
+        await student_session.login(email=STUDENT_EMAIL, password=STUDENT_PASSWORD)
+        student_rpc = RPC(
+            session=student_session, base_url=student_config.base_url, network_id=COURSE_ID
+        )
+        student_network = Network(student_rpc, COURSE_ID)
+
+        post_response = await student_network.create_post(
+            post_type="question",
+            folders=["other"],
+            title="Cross-Role Test Post",
+            content="This is a test post created by the student.",
+            bypass_email=True,
+            silent_update=True,
+        )
+        post_id = post_response.id
+        logger.info("✓ Student created post: %s", post_id)
+
+        # 2. Student adds a followup
+        followup_id = await student_network.create_followup(
+            post=post_id, content="Student followup question."
+        )
+        logger.info("✓ Student created followup: %s", followup_id)
+
+    # 3. Instructor interacts with it
+    instructor_config = SessionConfig(course_id=COURSE_ID)
+    async with SessionStateManager(instructor_config) as instructor_session:
+        await instructor_session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        instructor_rpc = RPC(
+            session=instructor_session, base_url=instructor_config.base_url, network_id=COURSE_ID
+        )
+        instructor_network = Network(instructor_rpc, COURSE_ID)
+
+        # Instructor answers the followup
+        await instructor_network.answer_post(
+            post_id=post_id, content="Instructor answer to the main post.", instructor_answer=True
+        )
+        logger.info("✓ Instructor answered post.")
+
+        # Instructor endorses the post
+        await instructor_network.endorse_post(post_id=post_id)
+        logger.info("✓ Instructor endorsed post.")
+
+        # Instructor deletes the post to clean up
+        await instructor_network.delete_post(post_id)
+        logger.info("✓ Instructor deleted post: %s", post_id)

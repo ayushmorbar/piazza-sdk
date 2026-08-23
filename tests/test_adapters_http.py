@@ -12,17 +12,12 @@ import pytest
 from piazza_sdk.adapters.http import RPC, _AuthRetryNeededError
 from piazza_sdk.exceptions import (
     AuthenticationError,
-    ContentError,
-    FeedError,
     NetworkError,
     NotFoundError,
     PermissionError,
     PiazzaSDKError,
     RateLimitError,
 )
-
-pytestmark = pytest.mark.asyncio
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -60,10 +55,23 @@ def _make_session(client: httpx.AsyncClient | None = None) -> MagicMock:
     return adapter
 
 
-def _make_rpc(session: MagicMock | None = None, *, on_auth_error=None) -> RPC:
+def _make_rpc(
+    session: MagicMock | None = None,
+    *,
+    on_auth_error=None,
+    max_attempts: int | None = None,
+    retry_sleep=None,
+) -> RPC:
     if session is None:
         session = _make_session()
-    return RPC(session, "https://piazza.com", "test_nid", on_auth_error=on_auth_error)
+    return RPC(
+        session,
+        "https://piazza.com",
+        "test_nid",
+        on_auth_error=on_auth_error,
+        max_attempts=max_attempts,
+        retry_sleep=retry_sleep,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -186,35 +194,43 @@ class TestRPCRequestErrors:
             await rpc._request("POST", "/test", json={})
 
     async def test_429_raises_rate_limit_error(self):
-        rpc = _make_rpc(_make_session(_mock_client(429)))
+        rpc = _make_rpc(_make_session(_mock_client(429)), max_attempts=1)
         with pytest.raises(RateLimitError):
             await rpc._request("POST", "/test", json={})
 
     async def test_429_with_retry_after(self):
-        rpc = _make_rpc(_make_session(_mock_client(429, headers={"Retry-After": "5"})))
+        rpc = _make_rpc(
+            _make_session(_mock_client(429, headers={"Retry-After": "5"})), max_attempts=1
+        )
         with pytest.raises(RateLimitError) as exc_info:
             await rpc._request("POST", "/test", json={})
         assert exc_info.value.retry_after_ms == 5000
 
+    async def test_429_sets_status_code(self):
+        rpc = _make_rpc(_make_session(_mock_client(429)), max_attempts=1)
+        with pytest.raises(RateLimitError) as exc_info:
+            await rpc._request("POST", "/test", json={})
+        assert exc_info.value.status_code == 429
+
     async def test_500_raises_piazza_error(self):
-        rpc = _make_rpc(_make_session(_mock_client(500)))
+        rpc = _make_rpc(_make_session(_mock_client(500)), max_attempts=1)
         with pytest.raises(PiazzaSDKError):
             await rpc._request("POST", "/test", json={})
 
     async def test_timeout_raises_network_error(self):
-        rpc = _make_rpc()
+        rpc = _make_rpc(max_attempts=1)
         rpc.client.request = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
         with pytest.raises(NetworkError):
             await rpc._request("POST", "/test", json={})
 
     async def test_connect_error_raises_network_error(self):
-        rpc = _make_rpc()
+        rpc = _make_rpc(max_attempts=1)
         rpc.client.request = AsyncMock(side_effect=httpx.ConnectError("refused"))
         with pytest.raises(NetworkError):
             await rpc._request("POST", "/test", json={})
 
     async def test_unknown_error_raises_piazza_error(self):
-        rpc = _make_rpc(_make_session(_mock_client(502)))
+        rpc = _make_rpc(_make_session(_mock_client(502)), max_attempts=1)
         with pytest.raises(PiazzaSDKError):
             await rpc._request("POST", "/test", json={})
 
@@ -227,7 +243,7 @@ class TestRPCRequestErrors:
 class TestRPCAuthRetry:
     async def test_401_with_on_auth_error_retries(self):
         mock_httpx = _mock_client(401)
-        rpc = _make_rpc(_make_session(mock_httpx), on_auth_error=AsyncMock())
+        rpc = _make_rpc(_make_session(mock_httpx), on_auth_error=AsyncMock(), max_attempts=1)
         with pytest.raises(_AuthRetryNeededError):
             await rpc._request("POST", "/test", json={})
         rpc._on_auth_error.assert_called()
@@ -280,19 +296,120 @@ class TestRPCErrorMapping:
             await rpc._request("POST", "/test", json={})
 
     async def test_429_maps_to_rate_limit_error(self):
-        rpc = _make_rpc(_make_session(_mock_client(429)))
+        rpc = _make_rpc(_make_session(_mock_client(429)), max_attempts=1)
         with pytest.raises(RateLimitError):
             await rpc._request("POST", "/test", json={})
 
-    async def test_500_maps_to_piazza_error(self):
-        rpc = _make_rpc(_make_session(_mock_client(500)))
-        with pytest.raises(PiazzaSDKError):
+    async def test_500_maps_to_piazza_error_with_status(self):
+        rpc = _make_rpc(_make_session(_mock_client(500)), max_attempts=1)
+        with pytest.raises(PiazzaSDKError) as exc_info:
             await rpc._request("POST", "/test", json={})
+        assert exc_info.value.status_code == 500
 
-    async def test_502_maps_to_piazza_error(self):
-        rpc = _make_rpc(_make_session(_mock_client(502)))
-        with pytest.raises(PiazzaSDKError):
+    async def test_502_maps_to_piazza_error_with_status(self):
+        rpc = _make_rpc(_make_session(_mock_client(502)), max_attempts=1)
+        with pytest.raises(PiazzaSDKError) as exc_info:
             await rpc._request("POST", "/test", json={})
+        assert exc_info.value.status_code == 502
+
+
+# ---------------------------------------------------------------------------
+# Retry behavior — transient statuses are actually retried (F-03 regression)
+# ---------------------------------------------------------------------------
+
+
+async def _instant_sleep(seconds: float) -> None:
+    """Test double for tenacity's sleep callable (no wall-clock delay)."""
+
+
+class TestRetryBehavior:
+    async def test_429_retries_then_succeeds(self):
+        """429 responses must be retried until success (documented behavior)."""
+        call_count = 0
+
+        async def side_effect(*args: Any, **kwargs: Any) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                return _make_response(429)
+            return _make_response(200, {"result": "ok"})
+
+        client = AsyncMock(spec=httpx.AsyncClient)
+        client.request = AsyncMock(side_effect=side_effect)
+        rpc = _make_rpc(_make_session(client), max_attempts=3, retry_sleep=_instant_sleep)
+        result = await rpc._request("POST", "/test", json={})
+        assert result == {"result": "ok"}
+        assert call_count == 3
+
+    async def test_5xx_retries_until_exhaustion_reraises_typed(self):
+        """Exhausted 5xx retries reraise the typed PiazzaSDKError with status."""
+        call_count = 0
+
+        async def side_effect(*args: Any, **kwargs: Any) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return _make_response(503)
+
+        client = AsyncMock(spec=httpx.AsyncClient)
+        client.request = AsyncMock(side_effect=side_effect)
+        rpc = _make_rpc(_make_session(client), max_attempts=3, retry_sleep=_instant_sleep)
+        with pytest.raises(PiazzaSDKError) as exc_info:
+            await rpc._request("POST", "/test", json={})
+        assert call_count == 3
+        assert exc_info.value.status_code == 503
+
+    async def test_timeout_retries_then_raises_network_error(self):
+        """Timeouts must be retried before surfacing NetworkError."""
+        call_count = 0
+
+        async def side_effect(*args: Any, **kwargs: Any) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            raise httpx.TimeoutException("timeout")
+
+        client = AsyncMock(spec=httpx.AsyncClient)
+        client.request = AsyncMock(side_effect=side_effect)
+        rpc = _make_rpc(_make_session(client), max_attempts=2, retry_sleep=_instant_sleep)
+        with pytest.raises(NetworkError):
+            await rpc._request("POST", "/test", json={})
+        assert call_count == 2
+
+    async def test_client_errors_not_retried(self):
+        """4xx client errors (other than 401-refresh) propagate after one attempt."""
+        call_count = 0
+
+        async def side_effect(*args: Any, **kwargs: Any) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return _make_response(404)
+
+        client = AsyncMock(spec=httpx.AsyncClient)
+        client.request = AsyncMock(side_effect=side_effect)
+        rpc = _make_rpc(_make_session(client))
+        with pytest.raises(NotFoundError):
+            await rpc._request("POST", "/test", json={})
+        assert call_count == 1
+
+    async def test_rate_limit_wait_honors_retry_after(self):
+        """The wait strategy uses Retry-After for rate-limit responses."""
+        from tenacity import RetryCallState  # noqa: PLC0415
+
+        from piazza_sdk.adapters.http import _compute_retry_wait  # noqa: PLC0415
+
+        state = MagicMock(spec=RetryCallState)
+        state.attempt_number = 2
+        outcome = MagicMock()
+        outcome.exception.return_value = RateLimitError("rl", retry_after_ms=7500)
+        state.outcome = outcome
+        assert _compute_retry_wait(state) == 7.5
+
+    async def test_default_max_attempts_configurable(self):
+        rpc = _make_rpc(max_attempts=5)
+        assert rpc._max_attempts == 5
+
+    async def test_zero_or_negative_attempts_clamped_to_one(self):
+        rpc = _make_rpc(max_attempts=0)
+        assert rpc._max_attempts == 1
 
 
 # ---------------------------------------------------------------------------
@@ -306,10 +423,12 @@ class TestRPCContentGet:
         result = await rpc.content_get("post123")
         assert result == {"content": "data"}
 
-    async def test_content_get_error(self):
-        rpc = _make_rpc(_make_session(_mock_client(500)))
-        with pytest.raises(ContentError):
+    async def test_content_get_transport_error_propagates_typed(self):
+        """HTTP-level errors keep their type instead of being laundered (F-04)."""
+        rpc = _make_rpc(_make_session(_mock_client(500)), max_attempts=1)
+        with pytest.raises(PiazzaSDKError) as exc_info:
             await rpc.content_get("post123")
+        assert exc_info.value.status_code == 500
 
 
 class TestRPCFeed:
@@ -328,10 +447,11 @@ class TestRPCFeed:
         with pytest.raises(PiazzaSDKError, match="Reserved keys"):
             await rpc.get_my_feed(action="override")
 
-    async def test_get_my_feed_error(self):
-        rpc = _make_rpc(_make_session(_mock_client(500)))
-        with pytest.raises(FeedError):
+    async def test_get_my_feed_transport_error_propagates_typed(self):
+        rpc = _make_rpc(_make_session(_mock_client(500)), max_attempts=1)
+        with pytest.raises(PiazzaSDKError) as exc_info:
             await rpc.get_my_feed()
+        assert exc_info.value.status_code == 500
 
 
 class TestRPCContentCreate:
@@ -392,10 +512,51 @@ class TestRPCContentAnswer:
         result = await rpc.content_answer("post1", "answer text")
         assert result == {"ok": True}
 
-    async def test_content_answer_error(self):
-        rpc = _make_rpc(_make_session(_mock_client(500)))
-        with pytest.raises(ContentError):
+    async def test_content_answer_student_type(self):
+        """Student answers must send type='s_answer' (F-01 regression)."""
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        await rpc.content_answer("post1", "answer text", instructor_answer=False)
+        payload = rpc.client.request.call_args.kwargs["json"]
+        assert payload["params"]["type"] == "s_answer"
+        assert payload["params"]["revision"] == 1
+        assert payload["method"] == "content.answer"
+
+    async def test_content_answer_instructor_type(self):
+        """Instructor answers must send type='i_answer' (F-01 regression)."""
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        await rpc.content_answer("post1", "answer text", instructor_answer=True)
+        payload = rpc.client.request.call_args.kwargs["json"]
+        assert payload["params"]["type"] == "i_answer"
+
+    async def test_content_answer_custom_revision_and_anonymous(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        await rpc.content_answer("post1", "text", revision=2, anonymous=True)
+        params = rpc.client.request.call_args.kwargs["json"]["params"]
+        assert params["revision"] == 2
+        assert params["anonymous"] == "stud"
+
+    async def test_content_answer_transport_error_propagates_typed(self):
+        rpc = _make_rpc(_make_session(_mock_client(500)), max_attempts=1)
+        with pytest.raises(PiazzaSDKError) as exc_info:
             await rpc.content_answer("post1", "answer text")
+        assert exc_info.value.status_code == 500
+
+
+class TestRPCContentPinUnpin:
+    async def test_content_pin_uses_dedicated_method(self):
+        """Pin must call content.pin, not a tag add (F-06 regression)."""
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        await rpc.content_pin("post1")
+        payload = rpc.client.request.call_args.kwargs["json"]
+        assert payload["method"] == "content.pin"
+        assert payload["params"]["cid"] == "post1"
+        assert payload["params"]["nid"] == "test_nid"
+
+    async def test_content_unpin_uses_dedicated_method(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        await rpc.content_unpin("post1")
+        payload = rpc.client.request.call_args.kwargs["json"]
+        assert payload["method"] == "content.unpin"
 
 
 class TestRPCContentUpvote:

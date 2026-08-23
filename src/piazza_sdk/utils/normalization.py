@@ -16,9 +16,6 @@ def _basic_html_to_markdown(html: str) -> str:
     # Strip <script> and <style> content before conversion
     text = _SCRIPT_STYLE_RE.sub("", html)
 
-    # Handle common HTML entities
-    text = html_module.unescape(text)
-
     # Convert block-level elements
     text = re.sub(r"<br\s*/?>", "\n", text)
     text = re.sub(r"<p[^>]*>", "\n\n", text)
@@ -61,6 +58,11 @@ def _basic_html_to_markdown(html: str) -> str:
 
     # Remove remaining HTML tags
     text = re.sub(r"<[^>]+>", "", text)
+
+    # Unescape entities AFTER tag processing so escaped samples like
+    # "&lt;b&gt;" render as literal "<b>" text instead of being parsed
+    # as live tags and silently deleted by the strip above.
+    text = html_module.unescape(text)
 
     # Clean up whitespace
     text = re.sub(r"\n{3,}", "\n\n", text)

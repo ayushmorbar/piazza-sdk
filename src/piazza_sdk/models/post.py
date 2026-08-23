@@ -103,7 +103,7 @@ class PostRevision(BaseModel):
         created: Timestamp when this revision was created.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     revision: int = Field(default=0, description="Sequential revision number")
     subject: str = Field(default="", description="Subject line at this revision")
@@ -211,7 +211,7 @@ class Answer(BaseModel):
         folder: Folder assignment for this answer.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     id: str = Field(default="", description="Unique identifier for this answer")
     uid: str = Field(default="", description="Author's user ID")
@@ -244,7 +244,7 @@ class StudentInfo(BaseModel):
         role: Student role string.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     uid: str = Field(default="", description="Student's user ID")
     name: str = Field(default="", description="Student display name")
@@ -309,7 +309,7 @@ class PostConfig(BaseModel):
         schedule_later: Whether the post is scheduled for later.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     editor: str = Field(default="rich_text", description="Editor type for this post")
     has_emails_sent: bool = Field(default=False, description="Whether emails have been sent")
@@ -607,7 +607,7 @@ class PostCreatedResponse(BaseModel):
         id: The ID assigned to the newly created post or follow-up.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
     id: str = Field(description="New post or follow-up ID")
 
 
@@ -619,6 +619,6 @@ class AssetUploadResponse(BaseModel):
         url: The pre-signed upload URL (if available).
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
     id: str = Field(description="Asset identifier")
     url: str | None = Field(default=None, description="Pre-signed upload URL")

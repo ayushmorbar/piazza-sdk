@@ -7,12 +7,13 @@ and error mapping.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import AsyncRetrying, RetryCallState, retry_if_exception, stop_after_attempt
 
 from piazza_sdk.exceptions import (
     AuthenticationError,
@@ -34,36 +35,77 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from piazza_sdk.models.enums import PostType
+    from piazza_sdk.ports.session import SessionManagerProtocol
 
 # Keys that must never be overridden by caller-supplied kwargs.
 _BLOCKED_KEYS = frozenset({"action", "method", "nid", "params"})
 
+# HTTP statuses pre-emptively mapped before response parsing (transient failures).
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+
+# Retry policy defaults (overridable per-instance / via SessionConfig knobs).
+_DEFAULT_MAX_ATTEMPTS = 3
+_RETRY_BASE_DELAY_S = 1.0
+_RETRY_MAX_WAIT_S = 10.0
+_RATE_LIMIT_MAX_WAIT_S = 30.0
+
 
 class _AuthRetryNeededError(Exception):
-    """Raised inside _request to trigger a single retry after a token refresh."""
+    """Raised inside the request body to trigger a retry after a token refresh."""
 
 
 def _map_http_error(exc: httpx.HTTPStatusError) -> PiazzaSDKError:
-    """Map an HTTP status error to an SDK exception."""
+    """Map an HTTP status error to an SDK exception.
+
+    The ``status_code`` attribute is populated on every mapped error so the
+    retry predicate can distinguish transient server errors (5xx) from
+    permanent client errors (4xx).
+    """
     status = exc.response.status_code
     if status == 401:
-        return AuthenticationError(f"Unauthorized: {status}")
-    if status == 403:
-        return PermissionError(f"Forbidden: {status}")
-    if status == 404:
-        return NotFoundError(f"Not found: {status}")
-    if status == 429:
+        err: PiazzaSDKError = AuthenticationError(f"Unauthorized: {status}")
+    elif status == 403:
+        err = PermissionError(f"Forbidden: {status}")
+    elif status == 404:
+        err = NotFoundError(f"Not found: {status}")
+    elif status == 429:
         retry_after = exc.response.headers.get("Retry-After")
-        retry_after_ms = None
+        retry_after_ms: int | None = None
         if retry_after:
             with contextlib.suppress(ValueError):
                 raw = int(retry_after) * 1000
-                retry_after_ms = max(0, min(raw, 30_000))
-        return RateLimitError(f"Rate limited: {status}", retry_after_ms=retry_after_ms)
-    return PiazzaSDKError(f"HTTP error {status}")
+                retry_after_ms = max(0, min(raw, int(_RATE_LIMIT_MAX_WAIT_S * 1000)))
+        err = RateLimitError(f"Rate limited: {status}", retry_after_ms=retry_after_ms)
+    else:
+        err = PiazzaSDKError(f"HTTP error {status}")
+    err.status_code = status
+    return err
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Tenacity retry predicate.
+
+    Retries transient transport failures (timeouts, connection resets —
+    surfaced as ``NetworkError``), rate limits, the post-refresh sentinel,
+    and 5xx-class HTTP errors. Client errors (4xx) propagate immediately.
+    """
+    if isinstance(exc, (_AuthRetryNeededError, NetworkError, RateLimitError)):
+        return True
+    status = getattr(exc, "status_code", None)
+    return isinstance(status, int) and status >= 500
+
+
+def _compute_retry_wait(retry_state: RetryCallState) -> float:
+    """Exponential backoff that honors ``Retry-After`` for rate-limit responses."""
+    outcome = retry_state.outcome
+    outcome_exc = outcome.exception() if outcome is not None else None
+    if isinstance(outcome_exc, RateLimitError) and outcome_exc.retry_after_ms:
+        return min(float(outcome_exc.retry_after_ms) / 1000.0, _RATE_LIMIT_MAX_WAIT_S)
+    delay = _RETRY_BASE_DELAY_S * (2 ** max(retry_state.attempt_number - 1, 0))
+    return float(min(delay, _RETRY_MAX_WAIT_S))
 
 
 class RPC:
@@ -79,43 +121,82 @@ class RPC:
     callers to re-create them.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - explicit config surface mirrors SessionConfig knobs
         self,
-        session: Any,
+        session: SessionManagerProtocol | Any,
         base_url: str,
         network_id: str,
         *,
         on_auth_error: Callable[[], Any] | None = None,
+        max_attempts: int | None = None,
+        retry_base_delay: float | None = None,
+        retry_sleep: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
+        """Create an RPC client bound to a session adapter.
+
+        Args:
+            session: Object exposing ``client`` (typically
+                :class:`~piazza_sdk.adapters.session.SessionStateManager`,
+                which satisfies :class:`~piazza_sdk.ports.session.SessionManagerProtocol`).
+            base_url: Base URL prepended to every endpoint.
+            network_id: Piazza network (course) ID for this client.
+            on_auth_error: Callback invoked on HTTP 401 before a single retry.
+            max_attempts: Retry attempt budget. Defaults to 3.
+            retry_base_delay: Base delay (seconds) for exponential backoff.
+                Defaults to 1.0.
+            retry_sleep: Sleep callable used between retries. Defaults to
+                ``asyncio.sleep``; injectable for fast tests.
+        """
         self._session = session
         self._base_url = base_url.rstrip("/")
         self._nid = network_id
         self._on_auth_error = on_auth_error
         self._last_aid: str | None = None
+        default_attempts: int | None = max_attempts
+        self._max_attempts = (
+            max(1, default_attempts) if default_attempts is not None else _DEFAULT_MAX_ATTEMPTS
+        )
+        self._retry_base_delay = (
+            retry_base_delay if retry_base_delay is not None else _RETRY_BASE_DELAY_S
+        )
+        self._retry_sleep = retry_sleep
 
     @property
     def client(self) -> httpx.AsyncClient:
         """Return the current httpx client from the session adapter."""
         return self._session.client  # type: ignore[no-any-return]
 
-    _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
-
-    @retry(
-        retry=retry_if_exception_type(
-            (httpx.TimeoutException, httpx.ConnectError, _AuthRetryNeededError)
-        ),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
-        reraise=True,
-    )
     async def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
         """Make an HTTP request with retry and error handling.
 
-        Retries on:
-        - Connection and timeout errors (3 attempts)
-        - HTTP 429 / 5xx status codes (mapped to retryable SDK exceptions)
+        Retries (with exponential backoff honoring ``Retry-After``):
+        - Connection and timeout errors
+        - HTTP 429 rate limits
+        - HTTP 5xx server errors
         - HTTP 401 after a single session-refresh attempt
+
+        Client errors (other 4xx) propagate immediately as typed SDK exceptions.
         """
+        retryer = AsyncRetrying(
+            retry=retry_if_exception(_is_retryable),
+            stop=stop_after_attempt(self._max_attempts),
+            wait=self._wait_strategy,
+            sleep=self._retry_sleep if self._retry_sleep is not None else asyncio.sleep,
+            reraise=True,
+        )
+        return await retryer(self._request_once, method, endpoint, **kwargs)
+
+    def _wait_strategy(self, retry_state: RetryCallState) -> float:
+        """Per-instance exponential backoff honoring the configured base delay."""
+        outcome = retry_state.outcome
+        exc = outcome.exception() if outcome is not None else None
+        if isinstance(exc, RateLimitError) and exc.retry_after_ms:
+            return min(float(exc.retry_after_ms) / 1000.0, _RATE_LIMIT_MAX_WAIT_S)
+        delay = self._retry_base_delay * (2 ** max(retry_state.attempt_number - 1, 0))
+        return float(min(delay, _RETRY_MAX_WAIT_S))
+
+    async def _request_once(self, method: str, endpoint: str, **kwargs: Any) -> Any:
+        """Execute a single HTTP request attempt with error mapping."""
         url = f"{self._base_url}/{endpoint.lstrip('/')}"
         logger.debug("RPC %s %s", method, url)
         try:
@@ -127,8 +208,8 @@ class RPC:
                 response.status_code,
                 response.elapsed.total_seconds() * 1000,
             )
-            # Let tenacity retry on transient server errors
-            if response.status_code in self._RETRYABLE_STATUS:
+            # Map transient statuses before JSON parsing (error bodies may not be JSON)
+            if response.status_code in _RETRYABLE_STATUS:
                 exc = httpx.HTTPStatusError(
                     f"{response.status_code}", request=response.request, response=response
                 )
@@ -158,6 +239,50 @@ class RPC:
             logger.warning("RPC %s %s unexpected error: %s", method, url, exc)
             raise PiazzaSDKError(f"Unexpected error: {exc}") from exc
 
+    async def call(
+        self,
+        endpoint: str,
+        payload: dict[str, Any],
+        *,
+        error_cls: type[PiazzaSDKError] = PiazzaSDKError,
+        error_msg: str = "RPC call failed",
+        method: str = "POST",
+    ) -> Any:
+        """Execute an RPC request and return the unwrapped JSON-RPC result as-is.
+
+        Unlike :meth:`_safe_call`, this preserves *list-shaped* results
+        (e.g. ``user/api/get_user_classes`` returns a bare list) instead of
+        coercing them to ``{}``.
+
+        Args:
+            endpoint: API endpoint path (forwarded to ``_request``).
+            payload: JSON payload for the request.
+            error_cls: Exception class for embedded JSON-RPC errors.
+            error_msg: Message prefix for the raised exception.
+            method: HTTP method (default ``"POST"``).
+
+        Returns:
+            The unwrapped ``result`` value (dict, list, scalar) or the raw
+            body when no envelope is present.
+        """
+        raw = await self._request(method, endpoint, json=payload)
+        if not isinstance(raw, dict):
+            return raw
+        # JSON-RPC envelope: {"result": ..., "error": ..., "aid": ...}
+        if "result" in raw:
+            rpc_error = raw.get("error")
+            if rpc_error is not None:
+                # Piazza reports unknown RPC methods as embedded errors
+                # (e.g. "Method not found: get_user_preferences") rather
+                # than HTTP 404 — normalize them to NotFoundError so
+                # callers can feature-detect reliably.
+                text = str(rpc_error)
+                if "method not found" in text.lower():
+                    raise NotFoundError(f"RPC method not available: {text}")
+                raise error_cls(f"{error_msg}: {rpc_error}")
+            return raw["result"]
+        return raw
+
     async def _safe_call(
         self,
         endpoint: str,
@@ -167,39 +292,38 @@ class RPC:
         error_msg: str = "RPC call failed",
         method: str = "POST",
     ) -> dict[str, Any]:
-        """Execute an RPC request with standardized error handling.
+        """Execute an RPC request expecting a dict-shaped result.
 
-        Wraps ``_request`` with two behaviors that are otherwise copy-pasted
-        across every public method:
+        Wraps ``_request`` with two behaviors:
 
         1. Unwraps the JSON-RPC ``{result, error, aid}`` envelope so callers
            receive only the ``result`` payload.
-        2. Re-raises any ``PiazzaSDKError`` subclass as *error_cls* with a
-           human-readable *error_msg*.
+        2. Coerces non-dict results to ``{}`` (use :meth:`call` when a list
+           or scalar result is expected).
+
+        Typed SDK exceptions raised by the transport (e.g.
+        :class:`RateLimitError`, :class:`NetworkError`,
+        :class:`AuthenticationError`) propagate **unchanged** so callers keep
+        access to attributes like ``retry_after_ms`` and ``status_code``.
 
         Args:
             endpoint: API endpoint path (forwarded to ``_request``).
             payload: JSON payload for the request.
-            error_cls: Exception class to wrap errors with.
-            error_msg: Message prefix for the wrapped exception.
+            error_cls: Exception class to wrap *unexpected* (non-SDK) errors with.
+            error_msg: Message prefix for wrapped exceptions.
             method: HTTP method (default ``"POST"``).
 
         Returns:
             The unwrapped ``result`` dict, or ``{}`` on empty/non-dict.
         """
         try:
-            raw = await self._request(method, endpoint, json=payload)
-            if not isinstance(raw, dict):
-                return {}
-            # JSON-RPC envelope: {"result": ..., "error": ..., "aid": ...}
-            if "result" in raw:
-                rpc_error = raw.get("error")
-                if rpc_error is not None:
-                    raise error_cls(f"{error_msg}: {rpc_error}")
-                result = raw["result"]
-                return result if isinstance(result, dict) else {}
-            return raw
-        except PiazzaSDKError as exc:
+            result = await self.call(
+                endpoint, payload, error_cls=error_cls, error_msg=error_msg, method=method
+            )
+            return result if isinstance(result, dict) else {}
+        except PiazzaSDKError:
+            raise
+        except Exception as exc:
             raise error_cls(f"{error_msg}: {exc}") from exc
 
     async def content_get(self, post_id: str) -> dict[str, Any]:
@@ -295,17 +419,37 @@ class RPC:
         )
 
     async def content_answer(
-        self, post_id: str, content: str, instructor_answer: bool = False
+        self,
+        post_id: str,
+        content: str,
+        instructor_answer: bool = False,
+        *,
+        revision: int = 1,
+        anonymous: bool = False,
     ) -> dict[str, Any]:
-        """Post an answer to a question."""
+        """Post an answer to a question.
+
+        Matches Piazza's ``content.answer`` contract (verified against the
+        reference implementation): student answers use type ``"s_answer"``
+        and instructor answers use ``"i_answer"``.
+
+        Args:
+            post_id: The CID of the question to answer.
+            content: Answer body (HTML or plain text).
+            instructor_answer: Whether this is an official instructor answer.
+            revision: Revision number; must exceed the current answer's
+                history size when updating an existing answer.
+            anonymous: Whether to post anonymously (students only).
+        """
         payload = {
             "method": "content.answer",
             "params": {
                 "nid": self._nid,
                 "cid": post_id,
                 "content": content,
-                "type": "s_answer" if instructor_answer else "s",
-                "anonymous": "no",
+                "type": "i_answer" if instructor_answer else "s_answer",
+                "anonymous": "stud" if anonymous else "no",
+                "revision": revision,
                 "aid": self._last_aid,
             },
         }
@@ -314,6 +458,37 @@ class RPC:
             payload,
             error_cls=ContentError,
             error_msg=f"Failed to answer post {post_id}",
+        )
+
+    async def content_pin(self, post_id: str) -> dict[str, Any]:
+        """Pin a post using Piazza's dedicated ``content.pin`` method.
+
+        Args:
+            post_id: The CID of the post to pin.
+        """
+        payload = {
+            "method": "content.pin",
+            "params": {"nid": self._nid, "cid": post_id, "aid": self._last_aid},
+        }
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg=f"Failed to pin post {post_id}"
+        )
+
+    async def content_unpin(self, post_id: str) -> dict[str, Any]:
+        """Unpin a post using Piazza's dedicated ``content.unpin`` method.
+
+        Args:
+            post_id: The CID of the post to unpin.
+        """
+        payload = {
+            "method": "content.unpin",
+            "params": {"nid": self._nid, "cid": post_id, "aid": self._last_aid},
+        }
+        return await self._safe_call(
+            "/logic/api",
+            payload,
+            error_cls=ContentError,
+            error_msg=f"Failed to unpin post {post_id}",
         )
 
     async def content_upvote(self, post_id: str) -> dict[str, Any]:
@@ -375,7 +550,10 @@ class RPC:
     async def get_user_preferences(self) -> dict[str, Any]:
         """Get the current user's preferences for this network.
 
-        Returns empty dict if method not found (feature may not be available).
+        Returns an empty dict only when the method genuinely does not exist
+        for this network (``NotFoundError``). All other SDK errors —
+        including authentication and rate-limit failures — propagate so
+        they are not silently misread as "no preferences".
         """
         payload = {"method": "network.get_user_preferences", "params": {"nid": self._nid}}
         try:
@@ -385,7 +563,8 @@ class RPC:
                 error_cls=UserError,
                 error_msg="Failed to get user preferences",
             )
-        except PiazzaSDKError:
+        except NotFoundError:
+            logger.info("network.get_user_preferences not available; returning empty prefs")
             return {}
 
     async def update_user_preferences(self, preferences: dict[str, Any]) -> None:
@@ -552,11 +731,20 @@ class RPC:
             Integer count of unread direct messages.
         """
         payload = {"method": "memo.get_unread_message_count", "params": {}}
-        result = await self._safe_call(
+        # ``call`` (not ``_safe_call``) so scalar/list results are preserved.
+        result = await self.call(
             "/logic/api", payload, error_cls=PiazzaSDKError, error_msg="Failed to get unread count"
         )
-        count = result.get("result", 0) if isinstance(result, dict) else 0
-        return int(count)
+        if isinstance(result, dict):
+            value: Any = result.get("count", result.get("unread_count", 0))
+        elif isinstance(result, (int, float)) and not isinstance(result, bool):
+            value = result
+        else:
+            value = 0
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise PiazzaSDKError(f"Unexpected unread-count payload: {result!r}") from exc
 
     async def get_class_profile(self) -> dict[str, Any]:
         """Get course-specific profile and behavioral settings.

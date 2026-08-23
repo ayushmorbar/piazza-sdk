@@ -7,7 +7,10 @@ storage backends, configuration providers).
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @runtime_checkable
@@ -33,28 +36,32 @@ class SessionConfigProtocol(Protocol):
 class TokenStorageProtocol(Protocol):
     """Port for token persistence backends.
 
-    Adapters may store opaque token bytes to any medium (disk,
-    keyring, database) as long as they satisfy this interface.
+    Matches the :class:`~piazza_sdk.adapters.auth.CookieJar` contract:
+    async load/save against a filesystem path, with adapters free to
+    target other media (keyring, database) behind the same shape.
     """
 
-    def load(self) -> bytes:
-        """Load persisted token data.
+    async def load(self, path: Path) -> bool:
+        """Load persisted token data from *path*.
+
+        Args:
+            path: File path to read from.
 
         Returns:
-            Raw token bytes, or empty bytes if nothing is stored.
+            True if data was loaded, False if nothing was stored.
         """
         ...
 
-    def save(self, token_data: bytes) -> None:
-        """Persist token data.
+    async def save(self, path: Path) -> None:
+        """Persist token data to *path*.
 
         Args:
-            token_data: Raw token bytes to store.
+            path: File path to write to store.
         """
         ...
 
     def clear(self) -> None:
-        """Remove all persisted token data."""
+        """Remove all persisted in-memory token data."""
         ...
 
 
@@ -80,8 +87,13 @@ class AuthProtocol(Protocol):
         """Terminate the current session and release resources."""
         ...
 
-    async def refresh(self) -> None:
-        """Refresh an expired session (re-authenticate with stored credentials)."""
+    async def refresh(self, email: str | None = None, password: str | None = None) -> None:
+        """Refresh an expired session (re-authenticate with stored credentials).
+
+        Args:
+            email: Optional credential override for this refresh.
+            password: Optional credential override for this refresh.
+        """
         ...
 
     @property
@@ -93,6 +105,6 @@ class AuthProtocol(Protocol):
         """Return headers required for authenticated API requests.
 
         Returns:
-            Dictionary of header name/value pairs (e.g. ``x-csrf-token``).
+            Dictionary of header name/value pairs (e.g. ``csrf-token``).
         """
         ...

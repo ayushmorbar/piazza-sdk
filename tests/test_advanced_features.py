@@ -501,15 +501,15 @@ class TestDeletePost:
 
 class TestPinPost:
     @pytest.mark.asyncio
-    async def test_adds_pin_tag(self) -> None:
+    async def test_pins_via_dedicated_rpc(self) -> None:
         net = _make_network()
-        net.add_tag = AsyncMock()
+        net._rpc.content_pin = AsyncMock()
         post_obj = MagicMock(spec=Post)
         post_obj.id = "post_1"
         net.get_post = AsyncMock(return_value=post_obj)
 
         result = await net.pin_post("post_1")
-        net.add_tag.assert_awaited_once_with("post_1", "pin")
+        net._rpc.content_pin.assert_awaited_once_with("post_1")
         net.get_post.assert_awaited_once_with("post_1")
         assert result is post_obj
 
@@ -661,14 +661,13 @@ class TestGetHallOfFame:
     @pytest.mark.asyncio
     async def test_returns_items(self) -> None:
         net = _make_network()
+        # Post-envelope shape: RPC._safe_call already unwrapped {"result": ...}
         net._rpc.get_my_feed = AsyncMock(
             return_value={
-                "result": {
-                    "hof": {
-                        "best_answer": [
-                            {"uid": "u1", "nr": 10, "time": 30, "text": "Good answer", "when": 999}
-                        ]
-                    }
+                "hof": {
+                    "best_answer": [
+                        {"uid": "u1", "nr": 10, "time": 30, "text": "Good answer", "when": 999}
+                    ]
                 }
             }
         )
@@ -680,14 +679,14 @@ class TestGetHallOfFame:
     @pytest.mark.asyncio
     async def test_empty_hof(self) -> None:
         net = _make_network()
-        net._rpc.get_my_feed = AsyncMock(return_value={"result": {}})
+        net._rpc.get_my_feed = AsyncMock(return_value={})
         items = await net.get_hall_of_fame()
         assert items == []
 
     @pytest.mark.asyncio
     async def test_empty_best_answer(self) -> None:
         net = _make_network()
-        net._rpc.get_my_feed = AsyncMock(return_value={"result": {"hof": {}}})
+        net._rpc.get_my_feed = AsyncMock(return_value={"hof": {}})
         items = await net.get_hall_of_fame()
         assert items == []
 

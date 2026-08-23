@@ -9,7 +9,7 @@ __all__ = ["get_all_users", "get_instructor_stats", "get_online_users"]
 
 from typing import TYPE_CHECKING, Any
 
-from piazza_sdk.exceptions import ContentError, NotFoundError, PiazzaSDKError
+from piazza_sdk.exceptions import NotFoundError, PiazzaSDKError, UserError
 from piazza_sdk.models.user import User
 
 if TYPE_CHECKING:
@@ -37,7 +37,7 @@ async def get_all_users(rpc: RPC, *, session: SessionStateManager | None = None)
     except PiazzaSDKError:
         raise
     except Exception as exc:
-        raise ContentError(f"Failed to get users: {exc}") from exc
+        raise UserError(f"Failed to get users: {exc}") from exc
 
 
 async def get_instructor_stats(
@@ -61,7 +61,7 @@ async def get_instructor_stats(
     except (NotFoundError, PiazzaSDKError):
         raise
     except Exception as exc:
-        raise ContentError(f"Failed to get instructor stats: {exc}") from exc
+        raise UserError(f"Failed to get instructor stats: {exc}") from exc
 
 
 async def get_online_users(rpc: RPC, *, session: SessionStateManager | None = None) -> list[User]:
@@ -85,4 +85,4 @@ async def get_online_users(rpc: RPC, *, session: SessionStateManager | None = No
     except (NotFoundError, PiazzaSDKError):
         raise
     except Exception as exc:
-        raise ContentError(f"Failed to get online users: {exc}") from exc
+        raise UserError(f"Failed to get online users: {exc}") from exc

@@ -295,7 +295,8 @@ class TestNetworkIterAllPosts:
 
         assert len(posts) == 1
         assert posts[0].id == "post_1"
-        net.get_feed.assert_called_once_with(limit=5)
+        # Single page: 1 item < page size 5 → no second fetch
+        net.get_feed.assert_called_once_with(limit=5, offset=0)
         net.get_post.assert_called_once_with("post_1")
 
 

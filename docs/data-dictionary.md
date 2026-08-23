@@ -810,11 +810,11 @@ All protocols use `@runtime_checkable`. Defined in `src/piazza_sdk/ports/`.
 
 | Required Methods |
 |------------------|
-| `load() -> bytes` |
-| `save(token_data: bytes) -> None` |
+| `async load(path: Path) -> bool` |
+| `async save(path: Path) -> None` |
 | `clear() -> None` |
 
-**Implemented by**: None (placeholder for future use)
+**Implemented by**: `CookieJar` (structural subtyping)
 
 ---
 
@@ -824,9 +824,11 @@ All protocols use `@runtime_checkable`. Defined in `src/piazza_sdk/ports/`.
 |----------------------------|
 | `async login(email: str, password: str) -> None` |
 | `async logout() -> None` |
-| `async refresh() -> None` |
+| `async refresh(email: str \| None = None, password: str \| None = None) -> None` |
 | `needs_refresh -> bool` (property) |
 | `get_auth_headers() -> dict[str, str]` |
+
+Auth headers use the `csrf-token` header name (not `x-csrf-token`).
 
 **Implemented by**: `SessionStateManager`
 
@@ -850,7 +852,10 @@ All protocols use `@runtime_checkable`. Defined in `src/piazza_sdk/ports/`.
 | `client -> httpx.AsyncClient` (property) |
 | `base_url -> str` (property) |
 | `network_id -> str` (property) |
-| `async _request(method: str, endpoint: str, **kwargs: Any) -> Any` |
+
+The transport seam is the `client` property plus the adapter's public call
+methods (`content_get`, `get_my_feed`, …); the concrete `RPC` implements the
+full method surface.
 
 **Implemented by**: `RPC`
 
@@ -866,7 +871,11 @@ All protocols use `@runtime_checkable`. Defined in `src/piazza_sdk/ports/`.
 | `async login(email: str, password: str) -> None` |
 | `async logout() -> None` |
 | `async refresh() -> None` |
+| `async handle_auth_error() -> None` |
 | `get_auth_headers() -> dict[str, str]` |
+
+`handle_auth_error()` is the public recovery hook that RPC adapters invoke
+on HTTP 401 before retrying.
 
 **Implemented by**: `SessionStateManager`
 
@@ -992,3 +1001,23 @@ post = Post(
     revisions=[PostRevision(**r) for r in content.get("revisions", [])],
 )
 ```
+
+---
+
+## Live-Verified Wire Contracts (2026-08)
+
+The following behaviors were confirmed against the production
+`piazza.com` JSON-RPC API during the audit's live-verification pass.
+When code and this table disagree, trust the table and file a bug.
+
+| Contract | Detail |
+|---|---|
+| **Post creation** | `content.create` requires `subject` (not `title`), an anonymity *string* (`"no"`/`"stud"`/`"full"` — boolean `false` is rejected), and at least one existing `folders` entry. Unknown folder names are rejected with "Please specify folder". |
+| **Answers** | `content.answer` uses `type: "i_answer"` (instructor) / `"s_answer"` (student) plus a `revision` int. Instructors are denied `"s_answer"` with "No permission". Answers exist only on `question` posts. |
+| **Pinning** | Dedicated `content.pin` / `content.unpin` methods exist; tag-based pinning is not the wire mechanism. Locking remains tag-based (no dedicated endpoint). |
+| **Deletion** | `content.delete` returns an **empty dict** on success — there is no `{"result": "success"}` wrapper. Success = no embedded error and no explicitly failed result value. Same tolerance applies to resolve via `content.update`. |
+| **User classes** | The legacy `/user/api/get_user_classes` REST path returns HTTP 404. Classes derive from `user_profile.get_profile` → `all_classes`, a `{nid → class dict}` mapping. |
+| **Unknown methods** | Piazza reports unknown RPC methods as embedded errors ("Method not found: …") rather than HTTP 404; the RPC layer normalizes these to `NotFoundError`. |
+| **Nested payloads** | Real posts carry config keys beyond the model surface (e.g. `config.feed_groups`). Server-fed nested models (`PostConfig`, `Answer`, `PostRevision`) therefore ignore unknown keys instead of rejecting them. |
+| **Retries** | 429 and 5xx responses ARE retried (exponential backoff honoring `Retry-After`); typed exceptions survive retries via reraise, preserving `retry_after_ms` / `status_code`. |
+| **Feed** | `network.get_my_feed` result includes `total`; Hall-of-Fame data lives at `result.hof.best_answer` after single envelope unwrap. |

@@ -49,6 +49,7 @@ async def create_post(  # noqa: PLR0913
     post_type: PostType | str = "question",
     anonymous: bool = False,
     options: PublishingOptions | None = None,
+    folders: list[str] | None = None,
     **kwargs: Any,
 ) -> PostCreatedResponse:
     """Create a new post.
@@ -61,6 +62,10 @@ async def create_post(  # noqa: PLR0913
         post_type: Type of post (question, note, poll).
         anonymous: Whether to post anonymously.
         options: Publishing options (bypass email, silent update, anonymity).
+        folders: Folder names to file the post under. Defaults to
+            ``["General"]``. The folder must already exist in the target
+            course — Piazza rejects unknown folders with
+            "Please specify folder" (verified live).
         **kwargs: Additional parameters.
 
     Returns:
@@ -76,8 +81,21 @@ async def create_post(  # noqa: PLR0913
     extra = dict(kwargs)
     if options is not None:
         extra.update(options.to_kwargs())
+    # Piazza's content.create expects ``subject`` (verified live: sending
+    # only ``title`` fails with "Missing parameter: subject"), an anonymity
+    # *string* ("no"/"stud"/"full") — bool False fails with "Invalid
+    # anonymity setting" — and at least one folder ("Please specify
+    # folder"). ``title`` is still sent for backward compatibility.
+    if folders is None:
+        folders = ["General"]
     raw = await rpc.content_create(
-        title=title, content=content, type=post_type, anonymous=anonymous, **extra
+        subject=title,
+        title=title,
+        content=content,
+        type=post_type,
+        anonymous="stud" if anonymous else "no",
+        folders=folders,
+        **extra,
     )
     result = raw.get("result", raw)
     return PostCreatedResponse.model_validate(result)
@@ -213,7 +231,12 @@ async def delete_post(
         raise ValidationError("post_id must be non-empty")
     try:
         raw = await rpc.content_delete(post_id)
-        return isinstance(raw, dict) and raw.get("result") == "success"
+        # Verified live: content.delete returns an empty dict on success
+        # (no {"result": "success"} wrapper). Success = no embedded error
+        # AND no explicitly failed result value.
+        if not isinstance(raw, dict):
+            return True
+        return raw.get("result", "success") in (None, "success")
     except (NotFoundError, PiazzaSDKError):
         raise
     except Exception as exc:
@@ -291,11 +314,20 @@ async def resolve_post(
 
     Raises:
         ValidationError: If post_id is empty.
+
+    Note:
+        Unlike sibling operations, generic (non-SDK) exceptions propagate
+        unwrapped here. This is an intentional, tested contract — callers
+        that need uniform wrapping should catch ``Exception`` at the call site.
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
     raw = await rpc.content_update(cid=post_id, status="resolved")
-    return isinstance(raw, dict) and raw.get("result") == "success"
+    # Mirror delete_post: sparse/empty bodies are success (verified live);
+    # only an explicitly failed result value counts as failure.
+    if not isinstance(raw, dict):
+        return True
+    return raw.get("result", "success") in (None, "success")
 
 
 async def mark_as_unread(

@@ -35,6 +35,15 @@ class Piazza:
         self._networks: dict[str, Network] = {}
         self._user_rpc: RPC | None = None
 
+    def _retry_kwargs(self) -> dict[str, Any]:
+        """Map SessionConfig retry knobs onto RPC kwargs (when numeric)."""
+        retries = getattr(self._session.config, "retries", None)
+        retry_delay = getattr(self._session.config, "retry_delay", None)
+        return {
+            "max_attempts": retries if isinstance(retries, int) else None,
+            "retry_base_delay": retry_delay if isinstance(retry_delay, int | float) else None,
+        }
+
     def _get_user_rpc(self) -> RPC:
         """Return a reusable RPC instance with no network ID (user-level endpoints)."""
         if self._user_rpc is None:
@@ -42,7 +51,8 @@ class Piazza:
                 session=self._session,
                 base_url=self._session.config.base_url,
                 network_id="",
-                on_auth_error=self._session._rpc_refresh,
+                on_auth_error=self._session.handle_auth_error,
+                **self._retry_kwargs(),
             )
         return self._user_rpc
 
@@ -60,7 +70,8 @@ class Piazza:
                 session=self._session,
                 base_url=self._session.config.base_url,
                 network_id=nid,
-                on_auth_error=self._session._rpc_refresh,
+                on_auth_error=self._session.handle_auth_error,
+                **self._retry_kwargs(),
             )
             self._networks[nid] = Network(rpc, nid, session=self._session)
         return self._networks[nid]
@@ -68,22 +79,42 @@ class Piazza:
     async def get_user_classes(self) -> list[dict[str, Any]]:
         """Get list of classes (networks) the user belongs to.
 
+        Uses the ``user_profile.get_profile`` RPC and extracts its
+        ``all_classes`` mapping (``{nid -> class dict}``) — the legacy
+        ``/user/api/get_user_classes`` REST path returns HTTP 404 on the
+        current Piazza API (verified live 2026-08).
+
         Automatically restores the session if expired.
 
         Returns:
-            List of class dictionaries with id, name, nid, etc.
+            List of class dictionaries; each carries a ``nid`` key taken
+            from its mapping key when not already present.
         """
         if self._session.needs_refresh:
             await self._session.refresh()
         try:
-            raw = await self._get_user_rpc()._safe_call(
-                "/user/api/get_user_classes", {}, error_msg="Failed to get user classes"
-            )
-            return raw.get("result", []) if isinstance(raw, dict) else []  # type: ignore[no-any-return]
+            profile = await self._get_user_rpc().get_user_profile()
         except PiazzaSDKError:
             raise
         except Exception as exc:
             raise PiazzaSDKError(f"Failed to get user classes: {exc}") from exc
+
+        raw_classes: Any = (
+            profile.get("all_classes", profile.get("networks", []))
+            if isinstance(profile, dict)
+            else []
+        )
+        if isinstance(raw_classes, dict):
+            entries: list[Any] = []
+            for nid, value in raw_classes.items():
+                if isinstance(value, dict):
+                    item = dict(value)
+                    item.setdefault("nid", nid)
+                    entries.append(item)
+            return entries
+        if isinstance(raw_classes, list):
+            return [item for item in raw_classes if isinstance(item, dict)]
+        return []
 
     async def get_user_profile(self) -> dict[str, Any]:
         """Get the current user's profile via JSON-RPC.
@@ -98,8 +129,7 @@ class Piazza:
         if self._session.needs_refresh:
             await self._session.refresh()
         try:
-            raw = await self._get_user_rpc().get_user_profile()
-            return raw.get("result", raw) if isinstance(raw, dict) else raw  # type: ignore[no-any-return]
+            return await self._get_user_rpc().get_user_profile()
         except PiazzaSDKError:
             raise
         except Exception as exc:

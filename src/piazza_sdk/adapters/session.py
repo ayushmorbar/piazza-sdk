@@ -79,6 +79,19 @@ class SessionStateManager:
             "sec-ch-ua-platform": f'"{platform}"',
         }
 
+    def _build_client(self) -> httpx.AsyncClient:
+        """Build a fresh httpx client with the standard browser fingerprint.
+
+        Shared by ``__aenter__`` and :meth:`refresh` so every client
+        carries identical default headers (a previous implementation
+        omitted the Referer header on refreshed clients).
+        """
+        headers = self._default_headers()
+        headers["Referer"] = f"{self.config.base_url}/class/{self.config.course_id}"
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(self.config.timeout), headers=headers, follow_redirects=True
+        )
+
     @property
     def state(self) -> SessionState:
         """Current session state."""
@@ -233,11 +246,7 @@ class SessionStateManager:
 
         if self._state == SessionState.AUTHENTICATED:
             await self.close()
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self.config.timeout),
-                headers=self._default_headers(),
-                follow_redirects=True,
-            )
+            self._client = self._build_client()
             self._state = SessionState.UNAUTHENTICATED
 
         # Clear stale CSRF token — will be re-fetched during login
@@ -246,11 +255,12 @@ class SessionStateManager:
         await self.login(email, password)
         logger.info("Session refreshed for course %s", self.config.course_id)
 
-    async def _rpc_refresh(self) -> None:
-        """Refresh callback invoked by RPC on HTTP 401 (Issue 6).
+    async def handle_auth_error(self) -> None:
+        """Refresh callback invoked by RPC adapters on HTTP 401.
 
         Re-authenticates using stored credentials and re-applies cookies
-        to the active httpx client.
+        to the active httpx client so the retried request carries the new
+        session. This is the public seam RPC instances program against.
         """
         await self.refresh()
         # Re-apply refreshed cookies to the live httpx client so the
@@ -258,6 +268,10 @@ class SessionStateManager:
         if self._client is not None:
             for name, value in self._cookies.cookies.items():
                 self._client.cookies.set(name, value)
+
+    async def _rpc_refresh(self) -> None:
+        """Backward-compat alias for :meth:`handle_auth_error`."""
+        await self.handle_auth_error()
 
     async def restore_cookies(self) -> bool:
         """Restore cookies from disk if a cookie path is configured.
@@ -404,11 +418,7 @@ class SessionStateManager:
 
     async def __aenter__(self) -> SessionStateManager:
         """Enter async context — creates the HTTP client and restores cookies."""
-        headers = self._default_headers()
-        headers["Referer"] = f"{self.config.base_url}/class/{self.config.course_id}"
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(self.config.timeout), headers=headers, follow_redirects=True
-        )
+        self._client = self._build_client()
         # Auto-restore persisted cookies if available
         await self.restore_cookies()
         # Restore persisted CSRF token header for session resumption

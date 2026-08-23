@@ -23,20 +23,20 @@ Modern async Python SDK for Piazza's internal API. Apache-2.0 licensed.
 src/piazza_sdk/
   __init__.py          # Public API re-exports
   _version.py          # Version string (CalVer)
-  auth.py              # SessionConfig, CookieJar, SessionStateManager (canonical)
+  auth.py              # Backward-compat shim → adapters.auth + adapters.session
   exceptions.py        # Exception hierarchy rooted at PiazzaSDKError
   api/
-    rpc.py             # Low-level HTTP client (tenacity retries, error mapping)
-    piazza.py          # High-level Piazza client (get_user_classes, etc.)
+    rpc.py             # Backward-compat shim → adapters.http.RPC
+    piazza.py          # High-level Piazza client (classes via profile, network factory)
     network.py         # Network-level operations (feed, posts, search)
   adapters/            # Concrete implementations (hexagonal architecture)
-    auth.py            # CookieJar, FernetTokenStorage, SessionConfig, SessionState
-    http.py            # RPC adapter — httpx-backed HTTP client
-    session.py         # SessionStateManager adapter
-  ports/               # Protocol definitions (hexagonal architecture)
+    auth.py            # CookieJar, SessionConfig, SessionState
+    http.py            # RPC adapter — httpx client, tenacity retries, envelope unwrap
+    session.py         # SessionStateManager adapter (CSRF login, refresh, heartbeat)
+  ports/               # Protocol definitions (structural contracts)
     auth.py            # AuthProtocol, SessionConfigProtocol, TokenStorageProtocol
     http.py            # HTTPClientProtocol, RPCProtocol
-    session.py         # SessionManagerProtocol
+    session.py         # SessionManagerProtocol (incl. handle_auth_error hook)
   domain/              # Standalone business logic (extracted from Network)
     feed.py            # get_feed, get_similar_posts
     posts.py           # create_post, answer_post, endorse, add_tag, etc.
@@ -70,6 +70,9 @@ tests/
   test_validation.py   # Validation edge case tests
   test_advanced_features.py  # Advanced feature tests
   test_feature_parity.py     # Feature parity tests
+  test_audit_fixes.py        # Regression tests for audit P0 fixes
+  test_auth_baseline.py      # LIVE tests (-m live; env-gated credentials)
+  test_live_phase5.py        # LIVE dual-role flows (-m live; env-gated)
 ```
 
 ## Code Style
@@ -84,9 +87,17 @@ tests/
 ## Architecture
 
 - **SessionStateManager** — async context manager; owns httpx client lifecycle. Call `.login()` then use `Piazza(session)` for API calls.
-- **RPC** — low-level HTTP via httpx. Retries on 429/5xx with exponential backoff. Maps HTTP errors to typed exceptions.
-- **Models** — Pydantic v2 `BaseModel` with `model_config = ConfigDict(strict=True, extra="forbid")`. All fields typed.
-- **Exceptions** — `PiazzaSDKError` base. Subclasses: `AuthenticationError`, `RateLimitError`, `NotFoundError`, `PermissionError`, `ValidationError`, `NetworkError`, `ContentError`, `FeedError`, `UserError`, `SearchError`, `StatisticsError`.
+- **RPC** — low-level HTTP via httpx. Retries on 429/5xx/timeouts with exponential backoff honoring `Retry-After`; maps HTTP errors to typed exceptions that survive retries (reraise).
+- **Models** — Pydantic v2 `BaseModel`. Server-fed models tolerate unknown keys (`extra="ignore"` — live payloads carry extras like `config.feed_groups`); client-side option models stay strict (`extra="forbid"`).
+- **Exceptions** — `PiazzaSDKError` base. Subclasses: `AuthenticationError`, `RateLimitError`, `NotFoundError`, `PermissionError`, `ValidationError`, `NetworkError`, `ContentError`, `FeedError`, `UserError`, `SearchError`, `StatisticsError`, `UploadError`, `SessionClosedError`.
+
+## Live API Contracts (verified 2026-08)
+
+See `docs/data-dictionary.md` § "Live-Verified Wire Contracts" before changing
+RPC payloads: `content.create` needs `subject` + existing `folders` + string
+anonymity; answers use `"i_answer"`/`"s_answer"` + `revision`; deletion returns
+`{}` on success; user classes come from `user_profile.get_profile.all_classes`;
+unknown methods surface as embedded errors normalized to `NotFoundError`.
 
 ## Coding Rules
 

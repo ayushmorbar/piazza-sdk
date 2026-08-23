@@ -29,6 +29,11 @@ PIAZZA_BASE_URL = "https://piazza.com"
 # Minimum expected CSRF token length for validation
 _MIN_CSRF_TOKEN_LENGTH = 16
 
+# Set-Cookie attributes that must never be ingested as cookie name/value pairs.
+_COOKIE_ATTRIBUTES = frozenset(
+    {"path", "domain", "expires", "max-age", "samesite", "priority", "partitioned"}
+)
+
 
 class SessionState(Enum):
     """Lifecycle states for an SDK session.
@@ -77,30 +82,50 @@ class CookieJar(BaseModel):
         return "; ".join(f"{k}={v}" for k, v in self.cookies.items())
 
     def update_from_header(self, header: str) -> int:
-        """Parse a Set-Cookie header and update the jar.
+        """Parse a Set-Cookie style header and update the jar.
+
+        Cookie attributes (``Path``, ``Domain``, ``Expires``, ``Max-Age``,
+        ``SameSite``, ``Priority``, ``Partitioned``) and flag attributes
+        without a value (``HttpOnly``, ``Secure``) are ignored; only real
+        name/value pairs are stored.
 
         Returns the number of cookies updated.
         """
         count = 0
         for raw_part in header.split(";"):
             stripped = raw_part.strip()
-            if "=" in stripped:
-                name, _, value = stripped.partition("=")
-                name = name.strip()
-                value = value.strip()
-                if name and value:
-                    self.cookies[name] = value
-                    count += 1
+            # Flag attributes (HttpOnly, Secure) carry no '=' — skipped naturally.
+            if "=" not in stripped:
+                continue
+            name, _, value = stripped.partition("=")
+            name = name.strip()
+            value = value.strip()
+            if not name or not value:
+                continue
+            if name.lower() in _COOKIE_ATTRIBUTES:
+                continue
+            self.cookies[name] = value
+            count += 1
         return count
 
     def _encrypt(self, data: str) -> str:
-        """Encrypt a string using Fernet symmetric encryption."""
-        assert self.encryption_key is not None
+        """Encrypt a string using Fernet symmetric encryption.
+
+        Raises:
+            PiazzaSDKError: If no encryption key is configured.
+        """
+        if self.encryption_key is None:
+            raise PiazzaSDKError("Cannot encrypt: no encryption_key is configured.")
         return Fernet(self.encryption_key).encrypt(data.encode()).decode()
 
     def _decrypt(self, token: str) -> str:
-        """Decrypt a Fernet-encrypted token."""
-        assert self.encryption_key is not None
+        """Decrypt a Fernet-encrypted token.
+
+        Raises:
+            PiazzaSDKError: If no encryption key is configured.
+        """
+        if self.encryption_key is None:
+            raise PiazzaSDKError("Cannot decrypt: no encryption_key is configured.")
         return Fernet(self.encryption_key).decrypt(token.encode()).decode()
 
     async def save(self, path: Path) -> None:
@@ -190,14 +215,6 @@ class CookieJar(BaseModel):
         except (json.JSONDecodeError, KeyError) as exc:
             logger.warning("Failed to parse cookie file %s: %s", path, exc)
         return False
-
-
-class FernetTokenStorage:
-    """Placeholder for Fernet-based token storage.
-
-    Kept for backward compatibility. The actual encryption logic lives
-    in CookieJar._encrypt/_decrypt.
-    """
 
 
 class SessionConfig(BaseSettings):

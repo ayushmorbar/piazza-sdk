@@ -49,6 +49,11 @@ class RPCProtocol(Protocol):
     including retry logic, error mapping, and response parsing.
     Adapters may wrap ``httpx``, ``aiohttp``, or any other async
     HTTP library behind this interface.
+
+    The transport seam is the ``client`` property plus the adapter's
+    public call methods (e.g. ``content_get``, ``get_my_feed``); the
+    concrete :class:`~piazza_sdk.adapters.http.RPC` implements the full
+    method surface.
     """
 
     @property
@@ -64,21 +69,4 @@ class RPCProtocol(Protocol):
     @property
     def network_id(self) -> str:
         """Piazza network (course) identifier sent with every request."""
-        ...
-
-    async def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
-        """Make an HTTP request with retry and error handling.
-
-        Args:
-            method: HTTP method (GET, POST, …).
-            endpoint: API endpoint path (e.g. ``/class/api/content_get``).
-            **kwargs: Extra keyword arguments forwarded to the HTTP
-                transport (json, data, headers, …).
-
-        Returns:
-            Parsed JSON response body.
-
-        Raises:
-            PiazzaSDKError: On HTTP, timeout, or unexpected errors.
-        """
         ...

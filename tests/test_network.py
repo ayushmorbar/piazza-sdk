@@ -365,15 +365,28 @@ class TestPinPost:
             await net.pin_post("")
 
     @pytest.mark.asyncio
-    async def test_adds_pin_tag_and_returns_post(self) -> None:
+    async def test_pins_via_dedicated_rpc_and_returns_post(self) -> None:
         net = _make_network()
         with (
-            patch.object(net, "add_tag", new_callable=AsyncMock) as mock_tag,
+            patch.object(net._rpc, "content_pin", new_callable=AsyncMock) as mock_pin,
             patch.object(net, "get_post", new_callable=AsyncMock) as mock_get,
         ):
             mock_get.return_value = Post(id="p1", title="t", raw={})
             result = await net.pin_post("p1")
-        mock_tag.assert_awaited_once_with("p1", "pin")
+        mock_pin.assert_awaited_once_with("p1")
+        mock_get.assert_awaited_once_with("p1")
+        assert isinstance(result, Post)
+
+    @pytest.mark.asyncio
+    async def test_unpins_via_dedicated_rpc_and_returns_post(self) -> None:
+        net = _make_network()
+        with (
+            patch.object(net._rpc, "content_unpin", new_callable=AsyncMock) as mock_unpin,
+            patch.object(net, "get_post", new_callable=AsyncMock) as mock_get,
+        ):
+            mock_get.return_value = Post(id="p1", title="t", raw={})
+            result = await net.unpin_post("p1")
+        mock_unpin.assert_awaited_once_with("p1")
         mock_get.assert_awaited_once_with("p1")
         assert isinstance(result, Post)
 
@@ -387,6 +400,7 @@ class TestLockPost:
 
     @pytest.mark.asyncio
     async def test_adds_lock_tag_and_returns_post(self) -> None:
+        # Locking is intentionally tag-based (no dedicated Piazza endpoint).
         net = _make_network()
         with (
             patch.object(net, "add_tag", new_callable=AsyncMock) as mock_tag,
@@ -546,12 +560,9 @@ class TestGetHallOfFame:
     @pytest.mark.asyncio
     async def test_extracts_best_answer_items(self) -> None:
         net = _make_network()
+        # Post-envelope shape: RPC._safe_call already unwrapped {"result": ...}
         net._rpc.get_my_feed = AsyncMock(
-            return_value={
-                "result": {
-                    "hof": {"best_answer": [{"uid": "u1", "nr": 10, "text": "Great answer"}]}
-                }
-            }
+            return_value={"hof": {"best_answer": [{"uid": "u1", "nr": 10, "text": "Great answer"}]}}
         )
         result = await net.get_hall_of_fame()
         assert len(result) == 1
@@ -560,21 +571,21 @@ class TestGetHallOfFame:
     @pytest.mark.asyncio
     async def test_missing_hof_returns_empty(self) -> None:
         net = _make_network()
-        net._rpc.get_my_feed = AsyncMock(return_value={"result": {}})
+        net._rpc.get_my_feed = AsyncMock(return_value={})
         result = await net.get_hall_of_fame()
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_missing_result_returns_empty(self) -> None:
+    async def test_non_dict_hof_returns_empty(self) -> None:
         net = _make_network()
-        net._rpc.get_my_feed = AsyncMock(return_value={})
+        net._rpc.get_my_feed = AsyncMock(return_value={"hof": "unexpected"})
         result = await net.get_hall_of_fame()
         assert result == []
 
     @pytest.mark.asyncio
     async def test_empty_best_answer_returns_empty(self) -> None:
         net = _make_network()
-        net._rpc.get_my_feed = AsyncMock(return_value={"result": {"hof": {"best_answer": []}}})
+        net._rpc.get_my_feed = AsyncMock(return_value={"hof": {"best_answer": []}})
         result = await net.get_hall_of_fame()
         assert result == []
 
@@ -617,7 +628,8 @@ class TestIterAllPosts:
         assert len(posts) == 2
         assert posts[0].id == "p1"
         assert posts[1].id == "p2"
-        net.get_feed.assert_awaited_once_with(limit=10)
+        # Single page: 2 items < page size 10 → no second fetch
+        net.get_feed.assert_awaited_once_with(limit=10, offset=0)
 
     @pytest.mark.asyncio
     async def test_empty_feed_yields_nothing(self) -> None:
@@ -643,7 +655,12 @@ class TestIterAllPosts:
         async for post in net.iter_all_posts(limit=3, delay_seconds=0):
             posts.append(post)
 
-        net.get_feed.assert_awaited_once_with(limit=3)
+        # The mock returns the same 5 items for any offset, so the stall guard
+        # stops iteration after page 2; only the first call's args matter here.
+        assert net.get_feed.await_count >= 1
+        first_call = net.get_feed.await_args_list[0]
+        assert first_call.kwargs["limit"] == 3
+        assert first_call.kwargs["offset"] == 0
 
 
 class TestListenForEvents:

@@ -319,6 +319,6 @@ class SearchBuilder:
         return SearchFilter(
             query=self._query,
             folder=self._folder if self._folder is not None else "",
-            limit=self._limit if self._limit != 50 else 50,
-            offset=self._offset if self._offset != 0 else 0,
+            limit=self._limit,
+            offset=self._offset,
         )

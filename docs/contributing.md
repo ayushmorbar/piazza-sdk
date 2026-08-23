@@ -57,7 +57,7 @@ src/piazza_sdk/
   auth.py              # Re-exports from adapters (backward compat)
   exceptions.py        # Exception hierarchy rooted at PiazzaSDKError
   adapters/            # Concrete implementations (hexagonal architecture)
-    auth.py            # CookieJar, FernetTokenStorage, SessionConfig, SessionState
+    auth.py            # CookieJar, SessionConfig, SessionState
     http.py            # RPC adapter — httpx-backed HTTP client
     session.py         # SessionStateManager (async context manager)
   ports/               # Protocol definitions (hexagonal architecture)

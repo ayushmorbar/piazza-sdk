@@ -11,6 +11,7 @@ manages session lifecycle and cross-cutting concerns.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from typing import TYPE_CHECKING, Any
 
 from piazza_sdk.domain.feed import get_feed as _domain_get_feed
@@ -48,6 +49,9 @@ if TYPE_CHECKING:
     from piazza_sdk.models.user import User, UserPreferences
 
 _HOF_FIELDS = {"uid", "nr", "time", "text", "when"}
+
+# Maximum remembered event IDs for the polling listener (memory bound).
+_MAX_SEEN_EVENT_IDS = 1000
 
 
 class Network:
@@ -393,7 +397,7 @@ class Network:
         return await _domain_delete_post(self._rpc, post_id=post_id)
 
     async def pin_post(self, post_id: str) -> Post:
-        """Pin a post by adding the 'pin' tag.
+        """Pin a post using Piazza's dedicated ``content.pin`` endpoint.
 
         Args:
             post_id: The post's unique identifier.
@@ -406,11 +410,33 @@ class Network:
         """
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
-        await self.add_tag(post_id, "pin")
+        await self._ensure_session()
+        await self._rpc.content_pin(post_id)
+        return await self.get_post(post_id)
+
+    async def unpin_post(self, post_id: str) -> Post:
+        """Unpin a post using Piazza's dedicated ``content.unpin`` endpoint.
+
+        Args:
+            post_id: The post's unique identifier.
+
+        Returns:
+            Updated Post model.
+
+        Raises:
+            ValidationError: If post_id is empty.
+        """
+        if not post_id or not post_id.strip():
+            raise ValidationError("post_id must be non-empty")
+        await self._ensure_session()
+        await self._rpc.content_unpin(post_id)
         return await self.get_post(post_id)
 
     async def lock_post(self, post_id: str) -> Post:
         """Lock a post by adding the 'lock' tag.
+
+        Piazza exposes no dedicated lock endpoint; locking is tag-based
+        (consistent with the reference client implementations).
 
         Args:
             post_id: The post's unique identifier.
@@ -618,8 +644,11 @@ class Network:
         await self._ensure_session()
         try:
             raw: dict[str, Any] = await self._rpc.get_my_feed()
+            # ``get_my_feed`` is already envelope-unwrapped by the RPC layer;
+            # the HOF block lives directly under the feed result.
+            hof_data: dict[str, Any] = raw.get("hof", {})
             hof_list: list[dict[str, Any]] = (
-                raw.get("result", {}).get("hof", {}).get("best_answer", [])
+                hof_data.get("best_answer", []) if isinstance(hof_data, dict) else []
             )
             return [
                 HallOfFameItem(**{k: v for k, v in item.items() if k in _HOF_FIELDS})
@@ -633,16 +662,20 @@ class Network:
     # ── Async iterators ───────────────────────────────────────────────
 
     async def iter_all_posts(
-        self, limit: int = 100, delay_seconds: float = 1.0
+        self, limit: int = 100, delay_seconds: float = 1.0, max_posts: int | None = None
     ) -> AsyncGenerator[Post, None]:
-        """Iterate over all posts in the network.
+        """Iterate over all posts in the network with real feed pagination.
 
-        Fetches the feed in batches and yields full Post objects.
-        Includes a configurable delay between requests to avoid rate limiting.
+        Fetches the feed in pages of *limit* items (advancing ``offset``
+        until the feed is exhausted) and yields full Post objects.
+        Includes a configurable delay between post fetches to avoid
+        rate limiting.
 
         Args:
-            limit: Maximum number of posts to iterate over.
+            limit: Page size per feed request.
             delay_seconds: Seconds to wait between post fetches.
+            max_posts: Safety cap on total posts yielded. ``None`` iterates
+                the entire feed.
 
         Yields:
             Post objects from the feed.
@@ -651,12 +684,31 @@ class Network:
             FeedError: If the feed API request fails.
             NotFoundError: If a post referenced by the feed cannot be found.
         """
-        feed = await self.get_feed(limit=limit)
-        for item in feed.feed:
-            post = await self.get_post(item.id)
-            yield post
-            if delay_seconds > 0:
-                await asyncio.sleep(delay_seconds)
+        offset = 0
+        yielded = 0
+        seen_ids: set[str] = set()
+        while True:
+            feed = await self.get_feed(limit=limit, offset=offset)
+            items = list(feed.feed)
+            if not items:
+                break
+            # Stall guard: if the server keeps returning already-seen IDs,
+            # pagination is not advancing — stop instead of looping forever.
+            new_items = [item for item in items if item.id not in seen_ids]
+            if not new_items:
+                break
+            for item in new_items:
+                if max_posts is not None and yielded >= max_posts:
+                    return
+                post = await self.get_post(item.id)
+                yield post
+                yielded += 1
+                seen_ids.add(item.id)
+                if delay_seconds > 0:
+                    await asyncio.sleep(delay_seconds)
+            offset += len(items)
+            if len(items) < limit:
+                break
 
     async def listen_for_events(
         self, poll_interval: float = 30.0
@@ -664,7 +716,7 @@ class Network:
         """Poll the feed for new events in an async generator loop.
 
         Calls ``get_feed()`` every ``poll_interval`` seconds and yields
-        any ``FeedItem`` objects not previously seen.  This replaces the
+        any ``FeedItem`` objects not previously seen. This replaces the
         CometD/Bayeux real-time stream with a reliable polling strategy
         over the existing ``get_feed()`` RPC path.
 
@@ -683,10 +735,16 @@ class Network:
             FeedError: If the feed API request fails during polling.
         """
         seen_ids: set[str] = set()
+        seen_order: deque[str] = deque()
         while True:
             feed = await self.get_feed()
             for item in feed.feed:
                 if item.id not in seen_ids:
                     seen_ids.add(item.id)
+                    seen_order.append(item.id)
+                    # Bound memory for long-running listeners: evict oldest IDs.
+                    if len(seen_order) > _MAX_SEEN_EVENT_IDS:
+                        oldest = seen_order.popleft()
+                        seen_ids.discard(oldest)
                     yield item
             await asyncio.sleep(poll_interval)

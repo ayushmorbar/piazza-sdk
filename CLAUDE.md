@@ -25,14 +25,14 @@ pytest tests/ --cov=src/piazza_sdk --cov-report=term-missing
 src/piazza_sdk/
   __init__.py          # Public API re-exports
   _version.py          # Version string (CalVer)
-  auth.py              # SessionConfig, CookieJar, SessionStateManager (canonical)
+  auth.py              # Backward-compat shim → adapters.auth + adapters.session
   exceptions.py        # Exception hierarchy rooted at PiazzaSDKError
   api/
-    rpc.py             # Low-level HTTP client (tenacity retries, error mapping)
+    rpc.py             # Backward-compat shim → adapters.http.RPC
     piazza.py          # High-level Piazza client (get_user_classes, etc.)
     network.py         # Network-level operations (feed, posts, search)
   adapters/            # Concrete implementations (hexagonal architecture)
-    auth.py            # CookieJar, FernetTokenStorage, SessionConfig, SessionState
+    auth.py            # CookieJar, SessionConfig, SessionState
     http.py            # RPC adapter — httpx-backed HTTP client
     session.py         # SessionStateManager adapter
   ports/               # Protocol definitions (hexagonal architecture)
@@ -77,9 +77,17 @@ tests/
 ## Architecture
 
 - **SessionStateManager** — async context manager; owns httpx client lifecycle. Call `.login()` then use `Piazza(session)` for API calls.
-- **RPC** — low-level HTTP via httpx. Retries on 429/5xx with exponential backoff. Maps HTTP errors to typed exceptions.
-- **Models** — Pydantic v2 `BaseModel` with `model_config = ConfigDict(strict=True, extra="forbid")`. All fields typed.
-- **Exceptions** — `PiazzaSDKError` base. Subclasses: `AuthenticationError`, `RateLimitError`, `NotFoundError`, `PermissionError`, `ValidationError`, `NetworkError`, `ContentError`, `FeedError`, `UserError`, `SearchError`, `StatisticsError`.
+- **RPC** — low-level HTTP via httpx. Retries on 429/5xx/timeouts with exponential backoff honoring `Retry-After`; maps HTTP errors to typed exceptions that survive retries (reraise).
+- **Models** — Pydantic v2 `BaseModel`. Server-fed models tolerate unknown keys (`extra="ignore"` — live payloads carry extras like `config.feed_groups`); client-side option models stay strict (`extra="forbid"`).
+- **Exceptions** — `PiazzaSDKError` base. Subclasses: `AuthenticationError`, `RateLimitError`, `NotFoundError`, `PermissionError`, `ValidationError`, `NetworkError`, `ContentError`, `FeedError`, `UserError`, `SearchError`, `StatisticsError`, `UploadError`, `SessionClosedError`.
+
+## Live API Contracts (verified 2026-08)
+
+See `docs/data-dictionary.md` § "Live-Verified Wire Contracts" before changing
+RPC payloads: `content.create` needs `subject` + existing `folders` + string
+anonymity; answers use `"i_answer"`/`"s_answer"` + `revision`; deletion returns
+`{}` on success; user classes come from `user_profile.get_profile.all_classes`;
+unknown methods surface as embedded errors normalized to `NotFoundError`.
 - **Hexagonal architecture** — `ports/` defines Protocol interfaces; `adapters/` provides concrete httpx/Fernet/cookie implementations; `domain/` holds standalone async business logic functions extracted from Network.
 
 ## Coding Rules

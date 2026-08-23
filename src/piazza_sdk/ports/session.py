@@ -61,10 +61,19 @@ class SessionManagerProtocol(Protocol):
         """Refresh an expired session by re-authenticating with stored credentials."""
         ...
 
+    async def handle_auth_error(self) -> None:
+        """Recover from an authentication failure (e.g. HTTP 401 during an RPC call).
+
+        Implementations typically re-authenticate with stored credentials and
+        re-apply fresh cookies to the active HTTP client so a retried request
+        succeeds.
+        """
+        ...
+
     def get_auth_headers(self) -> dict[str, str]:
         """Return headers required for authenticated API requests.
 
         Returns:
-            Dictionary of header name/value pairs (e.g. ``x-csrf-token``).
+            Dictionary of header name/value pairs (e.g. ``csrf-token``).
         """
         ...

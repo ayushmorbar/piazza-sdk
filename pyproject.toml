@@ -48,6 +48,10 @@ docs = [
     "mkdocstrings[python]>=0.26.0",
     "mkdocs-material>=9.5.0",
 ]
+# Higher-fidelity HTML→Markdown conversion (SDK falls back to stdlib without it)
+normalization = [
+    "html2text>=2024.2.26",
+]
 
 [project.urls]
 Homepage = "https://github.com/ayushmorbar/piazza-sdk"
@@ -106,7 +110,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = ["--strict-markers", "--tb=short"]
+markers = [
+    "live: tests that hit the real Piazza API (deselected by default; run with -m live)",
+]
+addopts = ["--strict-markers", "--tb=short", "-m", "not live"]
 
 [tool.coverage.run]
 source = ["src/piazza_sdk"]

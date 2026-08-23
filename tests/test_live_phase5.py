@@ -1,11 +1,18 @@
 """Live API verification for Phase 1–5 changes.
 
-Run with: python -m pytest tests/test_live_phase5.py -v -s
+Opt-in only: credentials are read from environment variables (or a local
+``.env``) and every test is skipped unless they are provided. Excluded
+from default runs via the ``live`` marker.
+
+Run explicitly with:
+    pytest -m live tests/test_live_phase5.py -v -s
 """
 
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
 
 import pytest
 
@@ -17,15 +24,45 @@ from piazza_sdk.api.network import Network
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-INSTRUCTOR_EMAIL = "regita2049@cadebek.com"
-INSTRUCTOR_PASSWORD = "cadebek.com"
-COURSE_ID = "mqsgm1zclb114z"
 
-STUDENT_EMAIL = "galahej384@divahd.com"
-STUDENT_PASSWORD = "divahd.com"
-STUDENT_COURSE_ID = "mqsgm1zclb114z"
+def _load_dotenv(path: Path = Path(".env")) -> None:
+    """Minimal .env loader so live tests are self-sufficient (no dotenv dep)."""
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip())
 
 
+_load_dotenv()
+
+# ── Credentials from environment (never hardcoded) ───────────────────
+INSTRUCTOR_EMAIL = os.environ.get("PIAZZA_INSTRUCTOR_EMAIL") or os.environ.get("PIAZZA_EMAIL", "")
+INSTRUCTOR_PASSWORD = os.environ.get("PIAZZA_INSTRUCTOR_PASSWORD") or os.environ.get(
+    "PIAZZA_PASSWORD", ""
+)
+COURSE_ID = os.environ.get("PIAZZA_COURSE_ID", "")
+
+STUDENT_EMAIL = os.environ.get("PIAZZA_STUDENT_EMAIL", "")
+STUDENT_PASSWORD = os.environ.get("PIAZZA_STUDENT_PASSWORD", "")
+STUDENT_COURSE_ID = os.environ.get("PIAZZA_STUDENT_COURSE_ID", "")
+
+live = pytest.mark.live
+requires_instructor_creds = pytest.mark.skipif(
+    not (INSTRUCTOR_EMAIL and INSTRUCTOR_PASSWORD and COURSE_ID),
+    reason="set PIAZZA_INSTRUCTOR_EMAIL / PIAZZA_INSTRUCTOR_PASSWORD / PIAZZA_COURSE_ID",
+)
+requires_student_creds = pytest.mark.skipif(
+    not (STUDENT_EMAIL and STUDENT_PASSWORD and STUDENT_COURSE_ID),
+    reason="set PIAZZA_STUDENT_EMAIL / PIAZZA_STUDENT_PASSWORD / PIAZZA_STUDENT_COURSE_ID",
+)
+
+
+@live
+@requires_instructor_creds
 @pytest.mark.asyncio
 async def test_instructor_login_and_feed():
     """Instructor: login → feed → post → stats → logout."""
@@ -82,6 +119,8 @@ async def test_instructor_login_and_feed():
         logger.info("✓ Logout OK")
 
 
+@live
+@requires_student_creds
 @pytest.mark.asyncio
 async def test_student_login_and_feed():
     """Student: login → feed → post → search → logout."""

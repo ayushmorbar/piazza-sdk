@@ -117,7 +117,7 @@ class Feed(BaseModel):
         page_size: Number of items per page.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     feed: list[FeedItem] = Field(default_factory=list)
     total: int = 0

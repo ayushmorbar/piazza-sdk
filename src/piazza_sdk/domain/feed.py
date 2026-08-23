@@ -121,3 +121,15 @@ async def get_similar_posts(
         raise
     except Exception as exc:
         raise FeedError(f"Failed to get similar posts for {post_id}: {exc}") from exc
+
+
+async def filter_feed(
+    rpc: RPC,
+    *,
+    session: SessionStateManager | None = None,
+    sort: str = "updated_desc",
+    unread: int = 1,
+    hidden: str = "both",
+) -> Feed:
+    raw = await rpc.network_filter_feed(sort=sort, unread=unread, hidden=hidden)
+    return Feed.model_validate(raw)

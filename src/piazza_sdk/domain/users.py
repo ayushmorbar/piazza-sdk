@@ -64,7 +64,7 @@ async def get_instructor_stats(
         raise UserError(f"Failed to get instructor stats: {exc}") from exc
 
 
-async def get_online_users(rpc: RPC, *, session: SessionStateManager | None = None) -> list[User]:
+async def get_online_users(rpc: RPC, *, session: SessionStateManager | None = None) -> int:
     """Get currently online users in the network.
 
     Args:
@@ -72,7 +72,7 @@ async def get_online_users(rpc: RPC, *, session: SessionStateManager | None = No
         session: Optional session manager for automatic refresh.
 
     Returns:
-        List of online User model instances.
+        Count of online users.
 
     Raises:
         NotFoundError: If users not found.
@@ -80,9 +80,47 @@ async def get_online_users(rpc: RPC, *, session: SessionStateManager | None = No
     """
     try:
         raw: dict[str, Any] = await rpc.get_online_users()
-        users_raw: list[dict[str, Any]] = raw.get("users", [])
-        return [User.model_validate(u, extra="ignore") for u in users_raw]
+        users_count = raw.get("users", 0)
+        if isinstance(users_count, list):
+            return len(users_count)
+        return int(users_count) if isinstance(users_count, (int, float, str)) else 0
     except (NotFoundError, PiazzaSDKError):
         raise
     except Exception as exc:
         raise UserError(f"Failed to get online users: {exc}") from exc
+
+
+async def get_users_by_ids(
+    rpc: RPC, *, session: SessionStateManager | None = None, ids: list[str]
+) -> list[User]:
+    raw = await rpc.network_get_users(ids)
+    return [User.model_validate(u) for u in raw]
+
+
+async def set_user_stat(
+    rpc: RPC, *, session: SessionStateManager | None = None, stat: str, val: Any
+) -> bool:
+    await rpc.user_set(stat, val)
+    return True
+
+
+async def unset_user_stat(
+    rpc: RPC, *, session: SessionStateManager | None = None, stat: str
+) -> bool:
+    await rpc.user_unset(stat)
+    return True
+
+
+async def get_my_events_info(
+    rpc: RPC, *, session: SessionStateManager | None = None
+) -> dict[str, Any]:
+    return await rpc.company_event_get_my_events_info()
+
+
+async def get_unread_message_count(rpc: RPC, *, session: SessionStateManager | None = None) -> int:
+    raw = await rpc.memo_get_unread_message_count()
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, dict):
+        return int(raw.get("count", 0))
+    return 0

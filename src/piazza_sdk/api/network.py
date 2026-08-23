@@ -14,27 +14,33 @@ import asyncio
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
-from piazza_sdk.domain.feed import get_feed as _domain_get_feed
-from piazza_sdk.domain.feed import get_similar_posts as _domain_get_similar_posts
-from piazza_sdk.domain.posts import add_followup as _domain_add_followup
-from piazza_sdk.domain.posts import add_tag as _domain_add_tag
-from piazza_sdk.domain.posts import answer_post as _domain_answer_post
-from piazza_sdk.domain.posts import create_folder as _domain_create_folder
-from piazza_sdk.domain.posts import create_post as _domain_create_post
-from piazza_sdk.domain.posts import delete_post as _domain_delete_post
-from piazza_sdk.domain.posts import endorse as _domain_endorse
-from piazza_sdk.domain.posts import mark_as_unread as _domain_mark_as_unread
-from piazza_sdk.domain.posts import remove_tag as _domain_remove_tag
-from piazza_sdk.domain.posts import resolve_post as _domain_resolve_post
-from piazza_sdk.domain.posts import save_draft as _domain_save_draft
-from piazza_sdk.domain.posts import upload_asset as _domain_upload_asset
-from piazza_sdk.domain.preferences import get_preferences as _domain_get_preferences
-from piazza_sdk.domain.preferences import update_preferences as _domain_update_preferences
-from piazza_sdk.domain.search import search as _domain_search
-from piazza_sdk.domain.statistics import get_statistics as _domain_get_statistics
-from piazza_sdk.domain.users import get_all_users as _domain_get_all_users
-from piazza_sdk.domain.users import get_instructor_stats as _domain_get_instructor_stats
-from piazza_sdk.domain.users import get_online_users as _domain_get_online_users
+from piazza_sdk.domain.feed import get_feed as _domain_get_feed  # noqa: PLC0415
+from piazza_sdk.domain.feed import get_similar_posts as _domain_get_similar_posts  # noqa: PLC0415
+from piazza_sdk.domain.posts import add_followup as _domain_add_followup  # noqa: PLC0415
+from piazza_sdk.domain.posts import add_tag as _domain_add_tag  # noqa: PLC0415
+from piazza_sdk.domain.posts import answer_post as _domain_answer_post  # noqa: PLC0415
+from piazza_sdk.domain.posts import create_folder as _domain_create_folder  # noqa: PLC0415
+from piazza_sdk.domain.posts import create_post as _domain_create_post  # noqa: PLC0415
+from piazza_sdk.domain.posts import delete_post as _domain_delete_post  # noqa: PLC0415
+from piazza_sdk.domain.posts import endorse as _domain_endorse  # noqa: PLC0415
+from piazza_sdk.domain.posts import mark_as_unread as _domain_mark_as_unread  # noqa: PLC0415
+from piazza_sdk.domain.posts import remove_tag as _domain_remove_tag  # noqa: PLC0415
+from piazza_sdk.domain.posts import resolve_post as _domain_resolve_post  # noqa: PLC0415
+from piazza_sdk.domain.posts import save_draft as _domain_save_draft  # noqa: PLC0415
+from piazza_sdk.domain.posts import upload_asset as _domain_upload_asset  # noqa: PLC0415
+from piazza_sdk.domain.preferences import (
+    get_preferences as _domain_get_preferences,  # noqa: PLC0415
+)
+from piazza_sdk.domain.preferences import (
+    update_preferences as _domain_update_preferences,  # noqa: PLC0415
+)
+from piazza_sdk.domain.search import search as _domain_search  # noqa: PLC0415
+from piazza_sdk.domain.statistics import get_statistics as _domain_get_statistics  # noqa: PLC0415
+from piazza_sdk.domain.users import get_all_users as _domain_get_all_users  # noqa: PLC0415
+from piazza_sdk.domain.users import (
+    get_instructor_stats as _domain_get_instructor_stats,  # noqa: PLC0415
+)
+from piazza_sdk.domain.users import get_online_users as _domain_get_online_users  # noqa: PLC0415
 from piazza_sdk.exceptions import FeedError, NotFoundError, PiazzaSDKError, ValidationError
 from piazza_sdk.models.feed import Feed, FeedFilter, FeedItem, FolderFilter
 from piazza_sdk.models.network import HallOfFameItem, Statistics
@@ -555,14 +561,15 @@ class Network:
         await self._ensure_session()
         return await _domain_get_instructor_stats(self._rpc)
 
-    async def get_online_users(self) -> list[User]:
+    async def get_online_users(self) -> int:
         """Get currently online users in the network.
 
         Returns:
-            List of online User model instances.
+            Count of online users.
 
         Raises:
-            UserError: If the API request fails.
+            NotFoundError: If users not found.
+            PiazzaSDKError: On unexpected errors.
         """
         await self._ensure_session()
         return await _domain_get_online_users(self._rpc)
@@ -748,3 +755,74 @@ class Network:
                         seen_ids.discard(oldest)
                     yield item
             await asyncio.sleep(poll_interval)
+
+    async def bookmark_post(self, post_id: str) -> bool:
+        from piazza_sdk.domain.posts import bookmark_post  # noqa: PLC0415
+
+        return await bookmark_post(self._rpc, post_id=post_id)
+
+    async def unbookmark_post(self, post_id: str) -> bool:
+        from piazza_sdk.domain.posts import unbookmark_post  # noqa: PLC0415
+
+        return await unbookmark_post(self._rpc, post_id=post_id)
+
+    async def favorite_post(self, post_id: str) -> bool:
+        from piazza_sdk.domain.posts import favorite_post  # noqa: PLC0415
+
+        return await favorite_post(self._rpc, post_id=post_id)
+
+    async def unfavorite_post(self, post_id: str) -> bool:
+        from piazza_sdk.domain.posts import unfavorite_post  # noqa: PLC0415
+
+        return await unfavorite_post(self._rpc, post_id=post_id)
+
+    async def view_post(self, post_id: str) -> bool:
+        from piazza_sdk.domain.posts import view_post  # noqa: PLC0415
+
+        return await view_post(self._rpc, post_id=post_id)
+
+    async def edit_post(self, post_id: str, type: str, **kwargs: Any) -> bool:
+        from piazza_sdk.domain.posts import edit_post  # noqa: PLC0415
+
+        return await edit_post(self._rpc, post_id=post_id, type=type, **kwargs)
+
+    async def cancel_edit(self) -> bool:
+        from piazza_sdk.domain.posts import cancel_edit  # noqa: PLC0415
+
+        return await cancel_edit(self._rpc, network_id=self._nid)
+
+    async def remove_endorsement(self, post_id: str, type: str = "tag_good") -> bool:
+        from piazza_sdk.domain.posts import remove_endorsement  # noqa: PLC0415
+
+        return await remove_endorsement(self._rpc, post_id=post_id, type=type)
+
+    async def auto_save_draft(
+        self, post_id: str, type: str, body: str, revision: int = 1, editor: str = "rte"
+    ) -> bool:
+        from piazza_sdk.domain.posts import auto_save_draft  # noqa: PLC0415
+
+        return await auto_save_draft(
+            self._rpc, post_id=post_id, type=type, body=body, revision=revision, editor=editor
+        )
+
+    async def filter_feed(
+        self, sort: str = "updated_desc", unread: int = 1, hidden: str = "both"
+    ) -> Feed:
+        from piazza_sdk.domain.feed import filter_feed  # noqa: PLC0415
+
+        return await filter_feed(self._rpc, sort=sort, unread=unread, hidden=hidden)
+
+    async def get_users_by_ids(self, ids: list[str]) -> list[User]:
+        from piazza_sdk.domain.users import get_users_by_ids  # noqa: PLC0415
+
+        return await get_users_by_ids(self._rpc, ids=ids)
+
+    async def set_user_stat(self, stat: str, val: Any) -> bool:
+        from piazza_sdk.domain.users import set_user_stat  # noqa: PLC0415
+
+        return await set_user_stat(self._rpc, stat=stat, val=val)
+
+    async def unset_user_stat(self, stat: str) -> bool:
+        from piazza_sdk.domain.users import unset_user_stat  # noqa: PLC0415
+
+        return await unset_user_stat(self._rpc, stat=stat)

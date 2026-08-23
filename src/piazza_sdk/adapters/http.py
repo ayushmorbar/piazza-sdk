@@ -780,3 +780,134 @@ class RPC:
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to set user settings"
         )
+
+    async def content_bookmark(self, cid: str) -> dict[str, Any]:
+        payload = {"method": "content.bookmark", "params": {"cid": cid}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to bookmark"
+        )
+
+    async def content_unbookmark(self, cid: str) -> dict[str, Any]:
+        payload = {"method": "content.unbookmark", "params": {"cid": cid}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to unbookmark"
+        )
+
+    async def content_mark_favorite(self, cid: str) -> dict[str, Any]:
+        payload = {"method": "content.mark_favorite", "params": {"cid": cid}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to mark favorite"
+        )
+
+    async def content_mark_unfavorite(self, cid: str) -> dict[str, Any]:
+        payload = {"method": "content.mark_unfavorite", "params": {"cid": cid}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to mark unfavorite"
+        )
+
+    async def content_view(self, cid: str) -> dict[str, Any]:
+        payload = {"method": "content.view", "params": {"cid": cid}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to view content"
+        )
+
+    async def content_edit(self, cid: str, type: str, **kwargs: Any) -> dict[str, Any]:
+        payload = {"method": "content.edit", "params": {"cid": cid, "type": type, **kwargs}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to edit content"
+        )
+
+    async def content_cancel_edit(self, nid: str) -> dict[str, Any]:
+        payload = {"method": "content.cancel_edit", "params": {"nid": nid}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to cancel edit"
+        )
+
+    async def content_remove_feedback(self, cid: str, type: str) -> dict[str, Any]:
+        payload = {"method": "content.remove_feedback", "params": {"cid": cid, "type": type}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to remove feedback"
+        )
+
+    async def content_auto_save(
+        self, cid: str, type: str, body: str, revision: int, editor: str
+    ) -> dict[str, Any]:
+        payload = {
+            "method": "content.auto_save",
+            "params": {
+                "cid": cid,
+                "type": type,
+                "body": body,
+                "revision": revision,
+                "editor": editor,
+                "network_id": self._nid,
+            },
+        }
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to auto save"
+        )
+
+    async def network_del_item(self, cid: str) -> dict[str, Any]:
+        payload = {"method": "network.del_item", "params": {"cid": cid}}
+        return await self._safe_call(
+            "/logic/api",
+            payload,
+            error_cls=NetworkError,
+            error_msg="Failed to delete item from network",
+        )
+
+    async def network_filter_feed(
+        self, sort: str = "updated_desc", unread: int = 1, hidden: str = "both"
+    ) -> dict[str, Any]:
+        payload = {
+            "method": "network.filter_feed",
+            "params": {"nid": self._nid, "sort": sort, "unread": unread, "hidden": hidden},
+        }
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=NetworkError, error_msg="Failed to filter feed"
+        )
+
+    async def network_get_users(self, ids: list[str]) -> dict[str, Any]:
+        payload = {"method": "network.get_users", "params": {"nid": self._nid, "ids": ids}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=NetworkError, error_msg="Failed to get specific users"
+        )
+
+    async def user_set(self, stat: str, val: Any) -> dict[str, Any]:
+        payload = {"method": "user.set", "params": {"stat": stat, "val": val}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=UserError, error_msg="Failed to set user setting"
+        )
+
+    async def user_unset(self, stat: str) -> dict[str, Any]:
+        payload = {"method": "user.unset", "params": {"stat": stat}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=UserError, error_msg="Failed to unset user setting"
+        )
+
+    async def company_event_get_my_events_info(self) -> dict[str, Any]:
+        payload = {"method": "company_event.get_my_events_info", "params": {}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=PiazzaSDKError, error_msg="Failed to get events info"
+        )
+
+    async def generic_page_event(self, type: str, **kwargs: Any) -> dict[str, Any]:
+        payload = {"method": "generic.page_event", "params": {"type": type, **kwargs}}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=PiazzaSDKError, error_msg="Failed to send page event"
+        )
+
+    async def generic_sanitize_html(self, **kwargs: str) -> dict[str, Any]:
+        payload = {"method": "generic.sanitize_html", "params": kwargs}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to sanitize html"
+        )
+
+    async def memo_get_unread_message_count(self) -> dict[str, Any]:
+        payload = {"method": "memo.get_unread_message_count", "params": {}}
+        return await self._safe_call(
+            "/logic/api",
+            payload,
+            error_cls=UserError,
+            error_msg="Failed to get unread message count",
+        )

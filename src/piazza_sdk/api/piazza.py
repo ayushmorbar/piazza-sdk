@@ -134,3 +134,31 @@ class Piazza:
             raise
         except Exception as exc:
             raise PiazzaSDKError(f"Failed to get user profile: {exc}") from exc
+
+    async def get_my_events_info(self) -> dict[str, Any]:
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.users import get_my_events_info  # noqa: PLC0415
+
+        return await get_my_events_info(self._get_user_rpc())
+
+    async def get_unread_message_count(self) -> int:
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.users import get_unread_message_count  # noqa: PLC0415
+
+        return await get_unread_message_count(self._get_user_rpc())
+
+    async def page_event(self, type: str, **kwargs: Any) -> bool:
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.generic import page_event  # noqa: PLC0415
+
+        return await page_event(self._get_user_rpc(), type=type, **kwargs)
+
+    async def sanitize_html(self, **kwargs: str) -> dict[str, str]:
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.generic import sanitize_html  # noqa: PLC0415
+
+        return await sanitize_html(self._get_user_rpc(), **kwargs)

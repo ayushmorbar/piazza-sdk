@@ -133,7 +133,10 @@ async def add_followup(  # noqa: PLR0913
     extra = dict(kwargs)
     if options is not None:
         extra.update(options.to_kwargs())
-    raw = await rpc.content_create(cid=post_id, content=content, anonymous=anonymous, **extra)
+    anon_str = "stud" if anonymous else "no"
+    raw = await rpc.content_create(
+        type="followup", cid=post_id, subject=content, content=content, anonymous=anon_str, **extra
+    )
     result = raw.get("result", raw)
     return PostCreatedResponse.model_validate(result)
 
@@ -487,3 +490,71 @@ async def upload_asset(
         raise
     except Exception as exc:
         raise UploadError(f"Failed to upload asset {filename}: {exc}") from exc
+
+
+async def bookmark_post(
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
+) -> bool:
+    await rpc.content_bookmark(post_id)
+    return True
+
+
+async def unbookmark_post(
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
+) -> bool:
+    await rpc.content_unbookmark(post_id)
+    return True
+
+
+async def favorite_post(
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
+) -> bool:
+    await rpc.content_mark_favorite(post_id)
+    return True
+
+
+async def unfavorite_post(
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
+) -> bool:
+    await rpc.content_mark_unfavorite(post_id)
+    return True
+
+
+async def view_post(rpc: RPC, *, session: SessionStateManager | None = None, post_id: str) -> bool:
+    await rpc.content_view(post_id)
+    return True
+
+
+async def edit_post(
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str, type: str, **kwargs: Any
+) -> bool:
+    await rpc.content_edit(post_id, type=type, **kwargs)
+    return True
+
+
+async def cancel_edit(
+    rpc: RPC, *, session: SessionStateManager | None = None, network_id: str
+) -> bool:
+    await rpc.content_cancel_edit(network_id)
+    return True
+
+
+async def remove_endorsement(
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str, type: str = "tag_good"
+) -> bool:
+    await rpc.content_remove_feedback(post_id, type)
+    return True
+
+
+async def auto_save_draft(  # noqa: PLR0913
+    rpc: RPC,
+    *,
+    session: SessionStateManager | None = None,
+    post_id: str,
+    type: str,
+    body: str,
+    revision: int = 1,
+    editor: str = "rte",
+) -> bool:
+    await rpc.content_auto_save(post_id, type, body, revision, editor)
+    return True

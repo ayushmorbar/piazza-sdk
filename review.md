@@ -634,3 +634,29 @@ pytest tests/ --ignore=tests/test_auth_baseline.py `
 - **P1 #1, #3, #4, #5:** Ports layer properly connected, FernetTokenStorage dead code is cleaned, html2text is correctly listed as an optional dependency in pyproject.toml.
 
 > **Status:** ✅ Fully verified via live API script (live_audit.py). All P0 functional correctness bugs and P1 architecture issues have been successfully addressed and remediated.
+
+
+## 12. HAR Discovery & Implementation Update (August 2026)
+
+**Deep search and analysis of provided HAR files revealed several undocumented endpoints missing from the SDK.**
+
+**Identified & Implemented Endpoints:**
+- `content.bookmark` / `content.unbookmark`: Bookmark/unbookmark a post.
+- `content.mark_favorite` / `content.mark_unfavorite`: Favorite/unfavorite a post.
+- `content.view`: Mark a post as viewed.
+- `content.edit`: Edit the content of a post.
+- `content.cancel_edit`: Release an edit lock on a post.
+- `content.remove_feedback`: Remove endorsement/feedback (e.g. `tag_good`).
+- `content.auto_save`: Auto-save draft of a post.
+- `network.filter_feed`: Filter feed (unread, sort, hidden).
+- `network.del_item`: Delete an item (already mostly handled, mapped to del_item endpoint).
+- `network.get_users`: Fetch a specific list of users by ID.
+- `user.set` / `user.unset`: Manage specific user preferences/flags.
+
+**Implementation Details:**
+1. **RPC Layer patched**: Added 14 new methods to `src/piazza_sdk/adapters/http.py` handling specific JSON-RPC payloads and mapping error classes.
+2. **Domain Layer extended**: Added wrapper logic in `domain/posts.py`, `domain/feed.py`, and `domain/users.py`.
+3. **Facade API updated**: Exposed these endpoints smoothly through the `Network` class (`src/piazza_sdk/api/network.py`).
+4. **Models relaxed**: The `Feed` model’s strict validation (`extra="forbid"`) was causing crashes against real live Piazza responses (which contain undocumented fields like `live`, `more`, `t`). Reconfigured to `extra="ignore"`.
+
+> **Status:** ✅ Fully verified via live API script (`har_live_test.py`). All newly discovered HAR functionalities have been successfully integrated into the codebase, linted (ruff + mypy strict), and verified against the live environment.

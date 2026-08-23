@@ -267,8 +267,7 @@ class TestNetworkGetOnlineUsers:
         net = _make_network()
         net._rpc.get_online_users = AsyncMock(return_value={"users": [{"id": "u1"}]})
         result = await net.get_online_users()
-        assert len(result) == 1
-        assert result[0].id == "u1"
+        assert result == 1
 
 
 class TestNetworkIterAllPosts:

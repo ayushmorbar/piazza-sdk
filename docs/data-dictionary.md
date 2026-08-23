@@ -1381,3 +1381,51 @@ A good raw model should preserve:
 
 and should leave room for future fields without breaking parsing.
 
+---
+
+## 11) network.update
+This JSON-RPC method is used to configure network-level (course-level) properties such as Office Hours, General Information, and Course Description.
+
+### Office Hours
+```json
+{
+  "method": "network.update",
+  "params": {
+    "id": "network_id",
+    "office_hours": {
+      "staff_uid": {
+        "time": "4",
+        "location": "dse"
+      }
+    }
+  }
+}
+```
+
+### General Information
+```json
+{
+  "method": "network.update",
+  "params": {
+    "id": "network_id",
+    "general_information": [
+      {
+        "label": "label here",
+        "text": "information goes here"
+      }
+    ]
+  }
+}
+```
+An empty array `[]` clears the general information.
+
+### Course Description
+```json
+{
+  "method": "network.update",
+  "params": {
+    "id": "network_id",
+    "course_description": "description"
+  }
+}
+```

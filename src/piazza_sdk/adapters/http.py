@@ -637,6 +637,22 @@ class RPC:
             error_msg=f"Failed to add badge to post {post_id}",
         )
 
+    async def network_update(self, **kwargs: Any) -> dict[str, Any]:
+        """Update network-level settings (e.g., office hours, general info)."""
+        blocked = _BLOCKED_KEYS & kwargs.keys()
+        if blocked:
+            raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
+        payload = {
+            "method": "network.update",
+            "params": {**kwargs, "id": self._nid, "aid": self._last_aid},
+        }
+        return await self._safe_call(
+            "/logic/api",
+            payload,
+            error_cls=NetworkError,
+            error_msg="Failed to update network settings",
+        )
+
     async def asset_get_upload_url(self, filename: str) -> dict[str, Any]:
         """Get a pre-signed URL for uploading an asset.
 

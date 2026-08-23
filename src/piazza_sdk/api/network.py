@@ -16,6 +16,15 @@ from typing import TYPE_CHECKING, Any
 
 from piazza_sdk.domain.feed import get_feed as _domain_get_feed  # noqa: PLC0415
 from piazza_sdk.domain.feed import get_similar_posts as _domain_get_similar_posts  # noqa: PLC0415
+from piazza_sdk.domain.network import (
+    update_course_description as _domain_update_course_description,  # noqa: PLC0415
+)
+from piazza_sdk.domain.network import (
+    update_general_information as _domain_update_general_information,  # noqa: PLC0415
+)
+from piazza_sdk.domain.network import (
+    update_office_hours as _domain_update_office_hours,  # noqa: PLC0415
+)
 from piazza_sdk.domain.posts import add_followup as _domain_add_followup  # noqa: PLC0415
 from piazza_sdk.domain.posts import add_tag as _domain_add_tag  # noqa: PLC0415
 from piazza_sdk.domain.posts import answer_post as _domain_answer_post  # noqa: PLC0415
@@ -632,6 +641,48 @@ class Network:
         """
         await self._ensure_session()
         await _domain_update_preferences(self._rpc, prefs=prefs)
+
+    # ── Network Settings ──────────────────────────────────────────────
+
+    async def update_office_hours(self, staff_uid: str, time: str, location: str) -> dict[str, Any]:
+        """Update office hours for a specific staff member.
+
+        Args:
+            staff_uid: The user ID of the staff member.
+            time: Office hours time string.
+            location: Office hours location string.
+
+        Returns:
+            The raw API response dictionary.
+        """
+        await self._ensure_session()
+        return await _domain_update_office_hours(
+            self._rpc, staff_uid=staff_uid, time=time, location=location
+        )
+
+    async def update_general_information(self, info: list[dict[str, str]]) -> dict[str, Any]:
+        """Update general information labels for the course.
+
+        Args:
+            info: A list of dicts with 'label' and 'text' keys. Empty list clears it.
+
+        Returns:
+            The raw API response dictionary.
+        """
+        await self._ensure_session()
+        return await _domain_update_general_information(self._rpc, info=info)
+
+    async def update_course_description(self, description: str) -> dict[str, Any]:
+        """Update the course description.
+
+        Args:
+            description: The new course description text.
+
+        Returns:
+            The raw API response dictionary.
+        """
+        await self._ensure_session()
+        return await _domain_update_course_description(self._rpc, description=description)
 
     # ── Hall of Fame ──────────────────────────────────────────────────
 

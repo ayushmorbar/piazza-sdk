@@ -13,7 +13,5 @@ async def page_event(
     return True
 
 
-async def sanitize_html(
-    rpc: RPC, *, session: SessionStateManager | None = None, **kwargs: str
-) -> dict[str, str]:
+async def sanitize_html(rpc: RPC, **kwargs: Any) -> dict[str, Any]:
     return await rpc.generic_sanitize_html(**kwargs)

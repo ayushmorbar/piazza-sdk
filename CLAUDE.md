@@ -58,20 +58,21 @@ src/piazza_sdk/
     classification.py  # Content classification
 
 tests/
-  conftest.py          # Shared fixtures (session_config, sample_*, mock_*)
-  test_basic.py        # Import and model validation tests
-  test_auth_unit.py    # Auth unit tests
-  test_exceptions.py   # Exception hierarchy tests
-  test_smoke.py        # Smoke tests
-  test_network.py      # Network class tests (feed, posts, users, errors)
-  test_domain.py       # Domain module tests
-  test_adapters_http.py # RPC adapter tests
-  test_utils.py        # Utility tests
-  test_utils_classification.py  # ActivityClassifier tests
-  test_utils_image.py  # Image utility tests
-  test_validation.py   # Validation edge case tests
-  test_advanced_features.py  # Advanced feature tests
-  test_feature_parity.py     # Feature parity tests
+  conftest.py                  # Shared fixtures (session_config, sample_*, mock_*)
+  test_config.py               # PiazzaConfig and SessionConfig tests
+  test_exceptions.py           # Exception hierarchy tests
+  test_models.py               # Pydantic models, filters, enums, builders
+  test_adapters_auth.py        # CookieJar, token storage, encryption
+  test_adapters_session.py     # SessionStateManager lifecycle, login, refresh
+  test_adapters_http.py        # RPC adapter tests (transport, retries, wrappers)
+  test_domain.py               # Pure domain module tests
+  test_api_piazza.py           # Piazza client tests (caching, profile, classes)
+  test_api_network.py          # Network facade tests (feed, posts, users, search)
+  test_utils_normalization.py  # Text and HTML normalization tests
+  test_utils_classification.py # ActivityClassifier tests
+  test_utils_image.py          # Image processing utility tests
+  test_validation.py           # Input validation edge case tests
+  test_live.py                 # LIVE tests (-m live; instructor, student, cross-role)
 ```
 
 ## Architecture

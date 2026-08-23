@@ -156,7 +156,7 @@ class Piazza:
 
         return await page_event(self._get_user_rpc(), type=type, **kwargs)
 
-    async def sanitize_html(self, **kwargs: str) -> dict[str, str]:
+    async def sanitize_html(self, **kwargs: Any) -> dict[str, Any]:
         if self._session.needs_refresh:
             await self._session.refresh()
         from piazza_sdk.domain.generic import sanitize_html  # noqa: PLC0415

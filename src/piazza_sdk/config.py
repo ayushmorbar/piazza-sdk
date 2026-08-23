@@ -7,11 +7,9 @@ the SDK's network, authentication, caching, and logging behavior.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from pathlib import Path  # noqa: TC003 - needed at runtime for Pydantic model resolution
+from typing import Any
 from urllib.parse import urlparse
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from cryptography.fernet import Fernet
 from pydantic import Field, field_validator

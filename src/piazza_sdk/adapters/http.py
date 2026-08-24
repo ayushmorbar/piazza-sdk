@@ -164,7 +164,7 @@ class RPC:
     @property
     def client(self) -> httpx.AsyncClient:
         """Return the current httpx client from the session adapter."""
-        return self._session.client  # type: ignore[no-any-return]
+        return self._session.client
 
     async def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
         """Make an HTTP request with retry and error handling.

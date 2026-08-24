@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "piazza-sdk"
-version = "2026.06.22"
+version = "2026.08.24"
 description = "Modern async Python SDK for Piazza's internal API (2026+)"
 readme = "README.md"
 requires-python = ">=3.11"

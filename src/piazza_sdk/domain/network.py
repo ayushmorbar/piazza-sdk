@@ -34,6 +34,12 @@ async def update_office_hours(
 
     Returns:
         The raw API response dictionary.
+
+        Example:
+            ```python
+            # Example for update_office_hours
+            res = await network.update_office_hours()
+            ```
     """
     payload = {"office_hours": {staff_uid: {"time": time, "location": location}}}
     return await rpc.network_update(**payload)
@@ -51,6 +57,12 @@ async def update_general_information(
 
     Returns:
         The raw API response dictionary.
+
+        Example:
+            ```python
+            # Example for update_general_information
+            res = await network.update_general_information()
+            ```
     """
     payload = {"general_information": info}
     return await rpc.network_update(**payload)
@@ -68,6 +80,12 @@ async def update_course_description(
 
     Returns:
         The raw API response dictionary.
+
+        Example:
+            ```python
+            # Example for update_course_description
+            res = await network.update_course_description()
+            ```
     """
     payload = {"course_description": description}
     return await rpc.network_update(**payload)
@@ -85,6 +103,12 @@ async def add_students(
 
     Returns:
         The raw API response dictionary.
+
+        Example:
+            ```python
+            # Example for add_students
+            res = await network.add_students()
+            ```
     """
     payload = {"from": "ClassSettingsPage", "add_students": emails}
     return await rpc.network_update(**payload)
@@ -102,6 +126,12 @@ async def remove_users(
 
     Returns:
         The raw API response dictionary.
+
+        Example:
+            ```python
+            # Example for remove_users
+            res = await network.remove_users()
+            ```
     """
     payload = {"remove_users": user_ids}
     return await rpc.network_update(**payload)

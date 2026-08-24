@@ -31,6 +31,12 @@ async def get_preferences(
 
     Raises:
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for get_preferences
+            res = await get_preferences()
+            ```
     """
     try:
         raw: dict[str, Any] = await rpc.get_user_preferences()
@@ -56,6 +62,12 @@ async def update_preferences(
 
     Raises:
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for update_preferences
+            res = await update_preferences()
+            ```
     """
     try:
         payload = prefs.model_dump(by_alias=True, exclude_unset=True)

@@ -96,6 +96,12 @@ class Network:
 
         Raises:
             FeedError: If the API request fails or returns invalid data.
+
+        Example:
+            ```python
+            # Example for get_feed
+            res = await network.get_feed(limit='...', offset='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_get_feed(self._rpc, limit=limit, offset=offset, **kwargs)
@@ -112,6 +118,12 @@ class Network:
 
         Raises:
             FeedError: If the API request fails.
+
+        Example:
+            ```python
+            # Example for get_user_unread_feed
+            res = await network.get_user_unread_feed(limit='...', offset='...')
+            ```
         """
         return await self.get_feed(limit=limit, offset=offset, updated=True)
 
@@ -127,6 +139,12 @@ class Network:
 
         Raises:
             FeedError: If the API request fails.
+
+        Example:
+            ```python
+            # Example for get_user_posted_feed
+            res = await network.get_user_posted_feed(limit='...', offset='...')
+            ```
         """
         return await self.get_feed(limit=limit, offset=offset, my_post=True)
 
@@ -143,6 +161,12 @@ class Network:
 
         Raises:
             FeedError: If the API request fails.
+
+        Example:
+            ```python
+            # Example for get_filtered_feed
+            res = await network.get_filtered_feed(filter='...', limit='...', offset='...')
+            ```
         """
         kwargs = filter.to_kwargs()
         return await self.get_feed(limit=limit, offset=offset, **kwargs)
@@ -159,6 +183,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id is empty.
+
+        Example:
+            ```python
+            # Example for get_similar_posts
+            res = await network.get_similar_posts(post_id='...')
+            ```
         """
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
@@ -176,6 +206,12 @@ class Network:
 
         Raises:
             FeedError: If the API request fails.
+
+        Example:
+            ```python
+            # Example for get_folder_contents
+            res = await network.get_folder_contents(folder_name='...')
+            ```
         """
         folder_filter = FolderFilter(folder_name=folder_name)
         return await self.get_filtered_feed(folder_filter)
@@ -194,6 +230,12 @@ class Network:
         Raises:
             ValidationError: If post_id is empty.
             NotFoundError: If post does not exist.
+
+        Example:
+            ```python
+            # Example for get_post
+            res = await network.get_post(post_id='...')
+            ```
         """
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
@@ -267,6 +309,15 @@ class Network:
 
         Raises:
             ValidationError: If title or content is empty.
+
+        Example:
+            ```python
+            # Example for create_post
+            res = await network.create_post(
+                title='...', content='...', post_type='...',
+                anonymous='...', options='...',
+            )
+            ```
         """
         await self._ensure_session()
         return await _domain_create_post(
@@ -300,6 +351,15 @@ class Network:
 
         Raises:
             ValidationError: If content is empty.
+
+        Example:
+            ```python
+            # Example for create_followup
+            res = await network.create_followup(
+                post='...', content='...',
+                anonymous='...', options='...',
+            )
+            ```
         """
         post_id = post if isinstance(post, str) else post.id
         await self._ensure_session()
@@ -333,6 +393,15 @@ class Network:
 
         Raises:
             ValidationError: If content is empty.
+
+        Example:
+            ```python
+            # Example for create_reply
+            res = await network.create_reply(
+                post='...', content='...',
+                anonymous='...', options='...',
+            )
+            ```
         """
         post_id = post if isinstance(post, str) else post.id
         await self._ensure_session()
@@ -358,6 +427,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id is empty.
+
+        Example:
+            ```python
+            # Example for resolve_post
+            res = await network.resolve_post(post_id='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_resolve_post(self._rpc, post_id=post_id)
@@ -381,6 +456,16 @@ class Network:
 
         Raises:
             ValidationError: If post_id or content is empty.
+
+        Example:
+            ```python
+            # Example for answer_post
+            res = await network.answer_post(
+                post_id='...', content='...',
+                instructor_answer='...', anonymous='...',
+                revision='...',
+            )
+            ```
         """
         await self._ensure_session()
         await _domain_answer_post(
@@ -405,6 +490,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id is empty.
+
+        Example:
+            ```python
+            # Example for endorse_post
+            res = await network.endorse_post(post_id='...', as_instructor_badge='...')
+            ```
         """
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
@@ -421,6 +512,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id or tag is empty.
+
+        Example:
+            ```python
+            # Example for add_tag
+            res = await network.add_tag(post_id='...', tag='...')
+            ```
         """
         await self._ensure_session()
         await _domain_add_tag(self._rpc, post_id=post_id, tag=tag)
@@ -434,6 +531,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id or tag is empty.
+
+        Example:
+            ```python
+            # Example for remove_tag
+            res = await network.remove_tag(post_id='...', tag='...')
+            ```
         """
         await self._ensure_session()
         await _domain_remove_tag(self._rpc, post_id=post_id, tag=tag)
@@ -449,6 +552,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id is empty.
+
+        Example:
+            ```python
+            # Example for delete_post
+            res = await network.delete_post(post_id='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_delete_post(self._rpc, post_id=post_id)
@@ -464,6 +573,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id is empty.
+
+        Example:
+            ```python
+            # Example for pin_post
+            res = await network.pin_post(post_id='...')
+            ```
         """
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
@@ -482,6 +597,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id is empty.
+
+        Example:
+            ```python
+            # Example for unpin_post
+            res = await network.unpin_post(post_id='...')
+            ```
         """
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
@@ -496,6 +617,12 @@ class Network:
             duplicate_id: The ID of the post that is a duplicate.
             master_id: The ID of the post to keep.
             message: Optional reason or message for duplication.
+
+        Example:
+            ```python
+            # Example for mark_duplicate
+            res = await network.mark_duplicate(duplicate_id='...', master_id='...', message='...')
+            ```
         """
         if not duplicate_id or not master_id:
             raise ValidationError("duplicate_id and master_id must be non-empty")
@@ -518,6 +645,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id is empty.
+
+        Example:
+            ```python
+            # Example for lock_post
+            res = await network.lock_post(post_id='...')
+            ```
         """
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
@@ -535,6 +668,12 @@ class Network:
 
         Raises:
             ValidationError: If post_id is empty.
+
+        Example:
+            ```python
+            # Example for mark_as_unread
+            res = await network.mark_as_unread(post_id='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_mark_as_unread(self._rpc, post_id=post_id)
@@ -550,6 +689,12 @@ class Network:
 
         Raises:
             ValidationError: If folder_name is empty.
+
+        Example:
+            ```python
+            # Example for create_folder
+            res = await network.create_folder(folder_name='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_create_folder(self._rpc, folder_name=folder_name)
@@ -570,6 +715,12 @@ class Network:
 
         Raises:
             ValidationError: If subject or content is empty.
+
+        Example:
+            ```python
+            # Example for save_draft
+            res = await network.save_draft(subject='...', content='...', post_type='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_save_draft(
@@ -595,6 +746,12 @@ class Network:
         Raises:
             ValidationError: If filename or file_data is empty.
             UploadError: If the upload fails.
+
+        Example:
+            ```python
+            # Example for upload_asset
+            res = await network.upload_asset(filename='...', file_data='...', content_type='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_upload_asset(
@@ -608,6 +765,12 @@ class Network:
 
         Args:
             emails: List of email addresses to enroll.
+
+        Example:
+            ```python
+            # Example for add_students
+            res = await network.add_students(emails='...')
+            ```
         """
         if not emails:
             return
@@ -619,6 +782,12 @@ class Network:
 
         Args:
             user_ids: List of user IDs to remove.
+
+        Example:
+            ```python
+            # Example for remove_users
+            res = await network.remove_users(user_ids='...')
+            ```
         """
         if not user_ids:
             return
@@ -633,6 +802,12 @@ class Network:
 
         Raises:
             UserError: If the API request fails.
+
+        Example:
+            ```python
+            # Example for get_users
+            res = await network.get_users()
+            ```
         """
         await self._ensure_session()
         return await _domain_get_all_users(self._rpc)
@@ -645,6 +820,12 @@ class Network:
 
         Raises:
             UserError: If the API request fails.
+
+        Example:
+            ```python
+            # Example for get_instructor_stats
+            res = await network.get_instructor_stats()
+            ```
         """
         await self._ensure_session()
         return await _domain_get_instructor_stats(self._rpc)
@@ -658,6 +839,12 @@ class Network:
         Raises:
             NotFoundError: If users not found.
             PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for get_online_users
+            res = await network.get_online_users()
+            ```
         """
         await self._ensure_session()
         return await _domain_get_online_users(self._rpc)
@@ -676,6 +863,12 @@ class Network:
 
         Raises:
             ValidationError: If query is empty.
+
+        Example:
+            ```python
+            # Example for search
+            res = await network.search(query='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_search(self._rpc, query=query, **kwargs)
@@ -688,6 +881,12 @@ class Network:
 
         Raises:
             StatisticsError: If the API request fails.
+
+        Example:
+            ```python
+            # Example for get_statistics
+            res = await network.get_statistics()
+            ```
         """
         await self._ensure_session()
         return await _domain_get_statistics(self._rpc)
@@ -702,6 +901,12 @@ class Network:
 
         Raises:
             ContentError: If the API request fails.
+
+        Example:
+            ```python
+            # Example for get_preferences
+            res = await network.get_preferences()
+            ```
         """
         await self._ensure_session()
         return await _domain_get_preferences(self._rpc)
@@ -717,6 +922,12 @@ class Network:
 
         Raises:
             ContentError: If the API call fails.
+
+        Example:
+            ```python
+            # Example for update_preferences
+            res = await network.update_preferences(prefs='...')
+            ```
         """
         await self._ensure_session()
         await _domain_update_preferences(self._rpc, prefs=prefs)
@@ -733,6 +944,12 @@ class Network:
 
         Returns:
             The raw API response dictionary.
+
+        Example:
+            ```python
+            # Example for update_office_hours
+            res = await network.update_office_hours(staff_uid='...', time='...', location='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_update_office_hours(
@@ -747,6 +964,12 @@ class Network:
 
         Returns:
             The raw API response dictionary.
+
+        Example:
+            ```python
+            # Example for update_general_information
+            res = await network.update_general_information(info='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_update_general_information(self._rpc, info=info)
@@ -759,6 +982,12 @@ class Network:
 
         Returns:
             The raw API response dictionary.
+
+        Example:
+            ```python
+            # Example for update_course_description
+            res = await network.update_course_description(description='...')
+            ```
         """
         await self._ensure_session()
         return await _domain_update_course_description(self._rpc, description=description)
@@ -777,6 +1006,12 @@ class Network:
 
         Raises:
             FeedError: If the API request fails or response parsing errors.
+
+        Example:
+            ```python
+            # Example for get_hall_of_fame
+            res = await network.get_hall_of_fame()
+            ```
         """
         await self._ensure_session()
         try:
@@ -820,6 +1055,12 @@ class Network:
         Raises:
             FeedError: If the feed API request fails.
             NotFoundError: If a post referenced by the feed cannot be found.
+
+        Example:
+            ```python
+            # Example for iter_all_posts
+            res = await network.iter_all_posts(limit='...', delay_seconds='...', max_posts='...')
+            ```
         """
         offset = 0
         yielded = 0
@@ -870,6 +1111,12 @@ class Network:
 
         Raises:
             FeedError: If the feed API request fails during polling.
+
+        Example:
+            ```python
+            # Example for listen_for_events
+            res = await network.listen_for_events(poll_interval='...')
+            ```
         """
         seen_ids: set[str] = set()
         seen_order: deque[str] = deque()

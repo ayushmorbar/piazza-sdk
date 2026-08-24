@@ -33,11 +33,23 @@ class HTTPClientProtocol(Protocol):
 
         Returns:
             The HTTP response object.
+
+        Example:
+            ```python
+            # Example for request
+            res = await request(method='...', url='...')
+            ```
         """
         ...
 
     async def aclose(self) -> None:
-        """Close the transport and release associated resources."""
+        """Close the transport and release associated resources.
+        Example:
+            ```python
+            # Example for aclose
+            res = await aclose()
+            ```
+        """
         ...
 
 

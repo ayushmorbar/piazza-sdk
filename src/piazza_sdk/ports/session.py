@@ -50,15 +50,33 @@ class SessionManagerProtocol(Protocol):
         Args:
             email: User email address.
             password: User password.
+
+        Example:
+            ```python
+            # Example for login
+            res = await login(email='...', password='...')
+            ```
         """
         ...
 
     async def logout(self) -> None:
-        """Terminate the current session and release all resources."""
+        """Terminate the current session and release all resources.
+        Example:
+            ```python
+            # Example for logout
+            res = await logout()
+            ```
+        """
         ...
 
     async def refresh(self) -> None:
-        """Refresh an expired session by re-authenticating with stored credentials."""
+        """Refresh an expired session by re-authenticating with stored credentials.
+        Example:
+            ```python
+            # Example for refresh
+            res = await refresh()
+            ```
+        """
         ...
 
     async def handle_auth_error(self) -> None:
@@ -67,6 +85,12 @@ class SessionManagerProtocol(Protocol):
         Implementations typically re-authenticate with stored credentials and
         re-apply fresh cookies to the active HTTP client so a retried request
         succeeds.
+
+        Example:
+            ```python
+            # Example for handle_auth_error
+            res = await handle_auth_error()
+            ```
         """
         ...
 

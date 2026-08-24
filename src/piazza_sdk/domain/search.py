@@ -35,6 +35,12 @@ async def search(
         ValidationError: If query is empty.
         SearchError: If search execution or parsing fails.
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for search
+            res = await search()
+            ```
     """
     if not query or not query.strip():
         raise ValidationError("query must be non-empty")

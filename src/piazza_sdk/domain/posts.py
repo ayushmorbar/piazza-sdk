@@ -77,6 +77,12 @@ async def create_post(  # noqa: PLR0913
 
     Raises:
         ValidationError: If title or content is empty.
+
+        Example:
+            ```python
+            # Example for create_post
+            res = await create_post()
+            ```
     """
     if not title or not title.strip():
         raise ValidationError("title must be non-empty")
@@ -131,6 +137,12 @@ async def add_followup(  # noqa: PLR0913
 
     Raises:
         ValidationError: If content is empty.
+
+        Example:
+            ```python
+            # Example for add_followup
+            res = await add_followup()
+            ```
     """
     if not content or not content.strip():
         raise ValidationError("content must be non-empty")
@@ -171,6 +183,12 @@ async def create_reply(  # noqa: PLR0913
 
     Raises:
         ValidationError: If content is empty.
+
+        Example:
+            ```python
+            # Example for create_reply
+            res = await create_reply()
+            ```
     """
     if not content or not content.strip():
         raise ValidationError("content must be non-empty")
@@ -210,6 +228,12 @@ async def answer_post(  # noqa: PLR0913
         ValidationError: If post_id or content is empty.
         NotFoundError: If the post does not exist.
         ContentError: If the answer fails.
+
+        Example:
+            ```python
+            # Example for answer_post
+            res = await answer_post()
+            ```
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
@@ -247,6 +271,12 @@ async def endorse(
         ValidationError: If post_id is empty.
         NotFoundError: If the post does not exist.
         ContentError: If the endorsement fails.
+
+        Example:
+            ```python
+            # Example for endorse
+            res = await endorse()
+            ```
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
@@ -279,6 +309,12 @@ async def delete_post(
         ValidationError: If post_id is empty.
         NotFoundError: If the post does not exist.
         ContentError: If the deletion fails.
+
+        Example:
+            ```python
+            # Example for delete_post
+            res = await delete_post()
+            ```
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
@@ -311,6 +347,12 @@ async def add_tag(
         ValidationError: If post_id or tag is empty.
         NotFoundError: If the post does not exist.
         ContentError: If adding the tag fails.
+
+        Example:
+            ```python
+            # Example for add_tag
+            res = await add_tag()
+            ```
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
@@ -339,6 +381,12 @@ async def remove_tag(
         ValidationError: If post_id or tag is empty.
         NotFoundError: If the post does not exist.
         ContentError: If removing the tag fails.
+
+        Example:
+            ```python
+            # Example for remove_tag
+            res = await remove_tag()
+            ```
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
@@ -377,6 +425,12 @@ async def resolve_post(
         Unlike sibling operations, generic (non-SDK) exceptions propagate
         unwrapped here. This is an intentional, tested contract — callers
         that need uniform wrapping should catch ``Exception`` at the call site.
+
+        Example:
+            ```python
+            # Example for resolve_post
+            res = await resolve_post()
+            ```
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
@@ -423,6 +477,12 @@ async def mark_as_unread(
     Raises:
         ValidationError: If post_id is empty.
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for mark_as_unread
+            res = await mark_as_unread()
+            ```
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
@@ -451,6 +511,12 @@ async def create_folder(
     Raises:
         ValidationError: If folder_name is empty.
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for create_folder
+            res = await create_folder()
+            ```
     """
     if not folder_name or not folder_name.strip():
         raise ValidationError("folder_name must be non-empty")
@@ -489,6 +555,12 @@ async def save_draft(
     Raises:
         ValidationError: If subject or content is empty.
         ContentError: If saving the draft fails.
+
+        Example:
+            ```python
+            # Example for save_draft
+            res = await save_draft()
+            ```
     """
     if not subject or not subject.strip():
         raise ValidationError("subject must be non-empty")
@@ -531,6 +603,12 @@ async def upload_asset(
     Raises:
         ValidationError: If filename or file_data is empty.
         UploadError: If the upload fails.
+
+        Example:
+            ```python
+            # Example for upload_asset
+            res = await upload_asset()
+            ```
     """
     if not filename or not filename.strip():
         raise ValidationError("filename must be non-empty")
@@ -644,6 +722,12 @@ async def pin_post(rpc: RPC, *, session: SessionStateManager | None = None, post
 
     Returns:
         True if successful.
+
+        Example:
+            ```python
+            # Example for pin_post
+            res = await pin_post()
+            ```
     """
     await rpc.content_pin(post_id)
     return True
@@ -659,6 +743,12 @@ async def unpin_post(rpc: RPC, *, session: SessionStateManager | None = None, po
 
     Returns:
         True if successful.
+
+        Example:
+            ```python
+            # Example for unpin_post
+            res = await unpin_post()
+            ```
     """
     await rpc.content_unpin(post_id)
     return True
@@ -683,6 +773,12 @@ async def mark_duplicate(
 
     Returns:
         True if successful.
+
+        Example:
+            ```python
+            # Example for mark_duplicate
+            res = await mark_duplicate()
+            ```
     """
     await rpc.content_duplicate(duplicate_id, master_id, message)
     return True

@@ -264,6 +264,12 @@ class RPC:
         Returns:
             The unwrapped ``result`` value (dict, list, scalar) or the raw
             body when no envelope is present.
+
+        Example:
+            ```python
+            # Example for call
+            res = await call(endpoint='...', payload='...')
+            ```
         """
         raw = await self._request(method, endpoint, json=payload)
         if not isinstance(raw, dict):
@@ -327,7 +333,13 @@ class RPC:
             raise error_cls(f"{error_msg}: {exc}") from exc
 
     async def content_get(self, post_id: str) -> dict[str, Any]:
-        """Get full content for a post."""
+        """Get full content for a post.
+        Example:
+            ```python
+            # Example for content_get
+            res = await content_get(post_id='...')
+            ```
+        """
         payload = {"method": "content.get", "params": {"nid": self._nid, "cid": post_id}}
         return await self._safe_call(
             "/logic/api",
@@ -337,7 +349,13 @@ class RPC:
         )
 
     async def get_my_feed(self, **kwargs: Any) -> dict[str, Any]:
-        """Get the user's feed."""
+        """Get the user's feed.
+        Example:
+            ```python
+            # Example for get_my_feed
+            res = await get_my_feed()
+            ```
+        """
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
@@ -347,7 +365,13 @@ class RPC:
         )
 
     async def content_create(self, **kwargs: Any) -> dict[str, Any]:
-        """Create new content (post or follow-up)."""
+        """Create new content (post or follow-up).
+        Example:
+            ```python
+            # Example for content_create
+            res = await content_create()
+            ```
+        """
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
@@ -360,7 +384,13 @@ class RPC:
         )
 
     async def content_update(self, **kwargs: Any) -> dict[str, Any]:
-        """Update existing content."""
+        """Update existing content.
+        Example:
+            ```python
+            # Example for content_update
+            res = await content_update()
+            ```
+        """
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
@@ -373,7 +403,13 @@ class RPC:
         )
 
     async def content_mark_resolved(self, post_id: str, resolved: bool = True) -> dict[str, Any]:
-        """Mark a post as resolved using content.mark_resolved."""
+        """Mark a post as resolved using content.mark_resolved.
+        Example:
+            ```python
+            # Example for content_mark_resolved
+            res = await content_mark_resolved(post_id='...', resolved='...')
+            ```
+        """
         payload = {
             "method": "content.mark_resolved",
             "params": {
@@ -393,7 +429,13 @@ class RPC:
     async def content_duplicate(
         self, duplicate_id: str, master_id: str, message: str = ""
     ) -> dict[str, Any]:
-        """Mark a post as a duplicate of another post."""
+        """Mark a post as a duplicate of another post.
+        Example:
+            ```python
+            # Example for content_duplicate
+            res = await content_duplicate(duplicate_id='...', master_id='...', message='...')
+            ```
+        """
         payload = {
             "method": "content.duplicate",
             "params": {
@@ -412,7 +454,13 @@ class RPC:
         )
 
     async def content_resolve(self, post_id: str) -> dict[str, Any]:
-        """Mark a post as resolved."""
+        """Mark a post as resolved.
+        Example:
+            ```python
+            # Example for content_resolve
+            res = await content_resolve(post_id='...')
+            ```
+        """
         payload = {
             "method": "content.mark_resolved",
             "params": {"nid": self._nid, "cid": post_id, "resolved": True, "aid": self._last_aid},
@@ -425,7 +473,13 @@ class RPC:
         )
 
     async def content_delete(self, post_id: str) -> dict[str, Any]:
-        """Delete a post."""
+        """Delete a post.
+        Example:
+            ```python
+            # Example for content_delete
+            res = await content_delete(post_id='...')
+            ```
+        """
         payload = {
             "method": "content.delete",
             "params": {"nid": self._nid, "cid": post_id, "aid": self._last_aid},
@@ -441,6 +495,12 @@ class RPC:
         """Get all users in the network.
 
         Uses network.get_all_users (network.get_users requires specific ids).
+
+        Example:
+            ```python
+            # Example for get_users
+            res = await get_users()
+            ```
         """
         payload = {"method": "network.get_all_users", "params": {"nid": self._nid}}
         return await self._safe_call(
@@ -448,7 +508,13 @@ class RPC:
         )
 
     async def search(self, query: str, **kwargs: Any) -> dict[str, Any]:
-        """Search posts by query."""
+        """Search posts by query.
+        Example:
+            ```python
+            # Example for search
+            res = await search(query='...')
+            ```
+        """
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
@@ -464,6 +530,12 @@ class RPC:
         """Get network statistics.
 
         Uses /main/api instead of /logic/api (confirmed from reference codebase).
+
+        Example:
+            ```python
+            # Example for get_stats
+            res = await get_stats()
+            ```
         """
         payload = {"method": "network.get_stats", "params": {"nid": self._nid}}
         return await self._safe_call(
@@ -492,6 +564,12 @@ class RPC:
             revision: Revision number; must exceed the current answer's
                 history size when updating an existing answer.
             anonymous: Whether to post anonymously (students only).
+
+        Example:
+            ```python
+            # Example for content_answer
+            res = await content_answer(post_id='...', content='...', instructor_answer='...')
+            ```
         """
         payload = {
             "method": "content.answer",
@@ -517,6 +595,12 @@ class RPC:
 
         Args:
             post_id: The CID of the post to pin.
+
+        Example:
+            ```python
+            # Example for content_pin
+            res = await content_pin(post_id='...')
+            ```
         """
         payload = {
             "method": "content.pin",
@@ -531,6 +615,12 @@ class RPC:
 
         Args:
             post_id: The CID of the post to unpin.
+
+        Example:
+            ```python
+            # Example for content_unpin
+            res = await content_unpin(post_id='...')
+            ```
         """
         payload = {
             "method": "content.unpin",
@@ -544,7 +634,13 @@ class RPC:
         )
 
     async def content_upvote(self, post_id: str) -> dict[str, Any]:
-        """Upvote a post or answer."""
+        """Upvote a post or answer.
+        Example:
+            ```python
+            # Example for content_upvote
+            res = await content_upvote(post_id='...')
+            ```
+        """
         payload = {
             "method": "content.add_feedback",
             "params": {"nid": self._nid, "cid": post_id, "type": "tag_good", "aid": self._last_aid},
@@ -557,7 +653,13 @@ class RPC:
         )
 
     async def content_add_tag(self, post_id: str, tag: str) -> dict[str, Any]:
-        """Add a tag to a post."""
+        """Add a tag to a post.
+        Example:
+            ```python
+            # Example for content_add_tag
+            res = await content_add_tag(post_id='...', tag='...')
+            ```
+        """
         payload = {
             "method": "content.add_tag",
             "params": {"nid": self._nid, "cid": post_id, "tag": tag, "aid": self._last_aid},
@@ -570,7 +672,13 @@ class RPC:
         )
 
     async def content_remove_tag(self, post_id: str, tag: str) -> dict[str, Any]:
-        """Remove a tag from a post."""
+        """Remove a tag from a post.
+        Example:
+            ```python
+            # Example for content_remove_tag
+            res = await content_remove_tag(post_id='...', tag='...')
+            ```
+        """
         payload = {
             "method": "content.remove_tag",
             "params": {"nid": self._nid, "cid": post_id, "tag": tag, "aid": self._last_aid},
@@ -583,7 +691,13 @@ class RPC:
         )
 
     async def get_instructor_stats(self) -> dict[str, Any]:
-        """Get instructor-specific statistics."""
+        """Get instructor-specific statistics.
+        Example:
+            ```python
+            # Example for get_instructor_stats
+            res = await get_instructor_stats()
+            ```
+        """
         payload = {"method": "network.get_instructor_stats", "params": {"nid": self._nid}}
         return await self._safe_call(
             "/logic/api",
@@ -593,7 +707,13 @@ class RPC:
         )
 
     async def get_online_users(self) -> dict[str, Any]:
-        """Get currently online users."""
+        """Get currently online users.
+        Example:
+            ```python
+            # Example for get_online_users
+            res = await get_online_users()
+            ```
+        """
         payload = {"method": "network.get_online_users", "params": {"nid": self._nid}}
         return await self._safe_call(
             "/logic/api", payload, error_cls=UserError, error_msg="Failed to get online users"
@@ -606,6 +726,12 @@ class RPC:
         for this network (``NotFoundError``). All other SDK errors —
         including authentication and rate-limit failures — propagate so
         they are not silently misread as "no preferences".
+
+        Example:
+            ```python
+            # Example for get_user_preferences
+            res = await get_user_preferences()
+            ```
         """
         payload = {"method": "network.get_user_preferences", "params": {"nid": self._nid}}
         try:
@@ -624,6 +750,12 @@ class RPC:
 
         Args:
             preferences: Dictionary of preference fields to update.
+
+        Example:
+            ```python
+            # Example for update_user_preferences
+            res = await update_user_preferences(preferences='...')
+            ```
         """
         blocked = _BLOCKED_KEYS & preferences.keys()
         if blocked:
@@ -638,7 +770,13 @@ class RPC:
             raise UserError(f"Failed to update user preferences: {exc}") from exc
 
     async def user_status(self) -> dict[str, Any]:
-        """Get the global user status (contains enrolled classes, etc.)."""
+        """Get the global user status (contains enrolled classes, etc.).
+        Example:
+            ```python
+            # Example for user_status
+            res = await user_status()
+            ```
+        """
         payload = {"method": "user.status", "params": {}}
         return await self._safe_call(
             "/main/api", payload, error_cls=UserError, error_msg="Failed to get user status"
@@ -649,6 +787,12 @@ class RPC:
 
         Args:
             post_id: The CID of the post to mark unread.
+
+        Example:
+            ```python
+            # Example for mark_as_unread
+            res = await mark_as_unread(post_id='...')
+            ```
         """
         payload = {
             "method": "content.mark_unread",
@@ -666,6 +810,12 @@ class RPC:
 
         Args:
             folder_name: Name of the folder to create.
+
+        Example:
+            ```python
+            # Example for add_folder
+            res = await add_folder(folder_name='...')
+            ```
         """
         payload = {
             "method": "network.add_folder",
@@ -684,6 +834,12 @@ class RPC:
         Args:
             post_id: The CID of the post to badge.
             badge_type: Badge type string (default ``"good_answer"``).
+
+        Example:
+            ```python
+            # Example for add_badge
+            res = await add_badge(post_id='...', badge_type='...')
+            ```
         """
         payload = {
             "method": "content.add_badge",
@@ -697,7 +853,13 @@ class RPC:
         )
 
     async def network_update(self, **kwargs: Any) -> dict[str, Any]:
-        """Update network-level settings (e.g., office hours, general info)."""
+        """Update network-level settings (e.g., office hours, general info).
+        Example:
+            ```python
+            # Example for network_update
+            res = await network_update()
+            ```
+        """
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
@@ -720,6 +882,12 @@ class RPC:
 
         Returns:
             Dictionary with upload URL and asset metadata.
+
+        Example:
+            ```python
+            # Example for asset_get_upload_url
+            res = await asset_get_upload_url(filename='...')
+            ```
         """
         payload = {
             "method": "asset.get_upload_url",
@@ -744,6 +912,12 @@ class RPC:
 
         Returns:
             Dictionary with the draft post data.
+
+        Example:
+            ```python
+            # Example for content_save_draft
+            res = await content_save_draft(subject='...', content='...', post_type='...')
+            ```
         """
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
@@ -772,6 +946,12 @@ class RPC:
 
         Returns:
             Dictionary with similar posts data.
+
+        Example:
+            ```python
+            # Example for content_get_similar
+            res = await content_get_similar(post_id='...')
+            ```
         """
         blocked = _BLOCKED_KEYS & kwargs.keys()
         if blocked:
@@ -793,6 +973,12 @@ class RPC:
         Returns:
             Dictionary with user profile data including name, email,
             school, roles, skills, and enrolled classes.
+
+        Example:
+            ```python
+            # Example for get_user_profile
+            res = await get_user_profile()
+            ```
         """
         payload = {"method": "user_profile.get_profile", "params": {}}
         return await self._safe_call(
@@ -804,6 +990,12 @@ class RPC:
 
         Returns:
             Integer count of unread direct messages.
+
+        Example:
+            ```python
+            # Example for get_unread_message_count
+            res = await get_unread_message_count()
+            ```
         """
         payload = {"method": "memo.get_unread_message_count", "params": {}}
         # ``call`` (not ``_safe_call``) so scalar/list results are preserved.
@@ -831,6 +1023,12 @@ class RPC:
 
         Returns:
             Dictionary with class profile configuration.
+
+        Example:
+            ```python
+            # Example for get_class_profile
+            res = await get_class_profile()
+            ```
         """
         payload = {"method": "class_profile.get_profile", "params": {"nid": self._nid}}
         return await self._safe_call(
@@ -850,6 +1048,12 @@ class RPC:
 
         Returns:
             Response dictionary from the server.
+
+        Example:
+            ```python
+            # Example for set_user_settings
+            res = await set_user_settings(settings='...')
+            ```
         """
         payload = {"method": "user.set_settings", "params": {"settings": settings}}
         return await self._safe_call(

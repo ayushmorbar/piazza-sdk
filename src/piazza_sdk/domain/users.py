@@ -29,6 +29,12 @@ async def get_all_users(rpc: RPC, *, session: SessionStateManager | None = None)
 
     Raises:
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for get_all_users
+            res = await get_all_users()
+            ```
     """
     try:
         raw = await rpc.get_users()
@@ -55,6 +61,12 @@ async def get_instructor_stats(
     Raises:
         NotFoundError: If stats not found.
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for get_instructor_stats
+            res = await get_instructor_stats()
+            ```
     """
     try:
         return await rpc.get_instructor_stats()
@@ -77,6 +89,12 @@ async def get_online_users(rpc: RPC, *, session: SessionStateManager | None = No
     Raises:
         NotFoundError: If users not found.
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for get_online_users
+            res = await get_online_users()
+            ```
     """
     try:
         raw: dict[str, Any] = await rpc.get_online_users()
@@ -125,6 +143,12 @@ async def get_user_status(
 
     Raises:
         UserError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for get_user_status
+            res = await get_user_status()
+            ```
     """
     try:
         return await rpc.user_status()

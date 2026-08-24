@@ -21,7 +21,7 @@ config = SessionConfig(
 | Field | Type | Default | Env Var | Description |
 |-------|------|---------|---------|-------------|
 | `course_id` | `str` | — | `PIAZZA_COURSE_ID` | Piazza course/network ID (required) |
-| `user_agent` | `str` | `"piazza-sdk-python/2026.06.22"` | `PIAZZA_USER_AGENT` | HTTP User-Agent header |
+| `user_agent` | `str` | `"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ..."` | `PIAZZA_USER_AGENT` | HTTP User-Agent header (Chrome browser UA by default) |
 | `base_url` | `str` | `"https://piazza.com"` | `PIAZZA_BASE_URL` | Base URL for the Piazza API |
 | `timeout` | `float` | `30.0` | `PIAZZA_TIMEOUT` | Request timeout in seconds |
 | `retries` | `int` | `3` | `PIAZZA_RETRIES` | Maximum retry attempts |

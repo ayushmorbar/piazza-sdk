@@ -23,6 +23,7 @@ __all__ = [
     "mark_duplicate",
 ]
 
+import asyncio
 import mimetypes
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -356,6 +357,11 @@ async def resolve_post(
 ) -> bool:
     """Mark a post as resolved.
 
+    This fetches the current post data and re-submits it with
+    ``status="resolved"`` via ``content.update``.  The dedicated
+    ``content.mark_resolved`` endpoint is unreliable on the live
+    API and returns *Invalid content*.
+
     Args:
         rpc: RPC client instance.
         session: Optional session manager for automatic refresh.
@@ -374,7 +380,28 @@ async def resolve_post(
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
-    raw = await rpc.content_mark_resolved(post_id)
+    post_data: dict[str, Any] = {}
+    if hasattr(rpc, "content_get"):
+        res = rpc.content_get(post_id)
+        if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
+            post_data = await res
+        elif isinstance(res, dict):
+            post_data = res
+    history_entries = post_data.get("history", [])
+    first_hist = (
+        history_entries[0] if history_entries and isinstance(history_entries[0], dict) else {}
+    )
+    subject = first_hist.get("subject", post_data.get("subject", ""))
+    content = first_hist.get("content", post_data.get("content", ""))
+    folders = post_data.get("folders", ["other"])
+    raw = await rpc.content_update(
+        cid=post_id,
+        subject=subject,
+        content=content,
+        folders=folders,
+        anonymous=post_data.get("default_anonymity", "no"),
+        status="resolved",
+    )
     if not isinstance(raw, dict):
         return True
     return raw.get("result", "success") in (None, "success")

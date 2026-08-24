@@ -151,6 +151,14 @@ class Piazza:
         return await get_user_status(self._get_user_rpc())
 
     async def get_my_events_info(self) -> dict[str, Any]:
+        """Get the current user's events and notifications info.
+
+        Uses the ``user.get_my_events_info`` RPC method.  Automatically
+        restores the session if expired.
+
+        Returns:
+            Dictionary containing event counts and notification metadata.
+        """
         if self._session.needs_refresh:
             await self._session.refresh()
         from piazza_sdk.domain.users import get_my_events_info  # noqa: PLC0415
@@ -158,6 +166,14 @@ class Piazza:
         return await get_my_events_info(self._get_user_rpc())
 
     async def get_unread_message_count(self) -> int:
+        """Get the count of unread messages for the current user.
+
+        Uses the ``user.get_unread_message_count`` RPC method.
+        Automatically restores the session if expired.
+
+        Returns:
+            Integer count of unread messages.
+        """
         if self._session.needs_refresh:
             await self._session.refresh()
         from piazza_sdk.domain.users import get_unread_message_count  # noqa: PLC0415
@@ -165,6 +181,18 @@ class Piazza:
         return await get_unread_message_count(self._get_user_rpc())
 
     async def page_event(self, type: str, **kwargs: Any) -> bool:
+        """Record a page-view event for analytics.
+
+        Uses the ``generic.page_event`` RPC method.  Automatically
+        restores the session if expired.
+
+        Args:
+            type: Event type string (e.g. ``"page"``).
+            **kwargs: Additional event payload fields.
+
+        Returns:
+            ``True`` if the event was accepted by the server.
+        """
         if self._session.needs_refresh:
             await self._session.refresh()
         from piazza_sdk.domain.generic import page_event  # noqa: PLC0415
@@ -172,6 +200,19 @@ class Piazza:
         return await page_event(self._get_user_rpc(), type=type, **kwargs)
 
     async def sanitize_html(self, **kwargs: Any) -> dict[str, Any]:
+        """Sanitize HTML content via Piazza's server-side cleaner.
+
+        Uses the ``generic.sanitize_html`` RPC method.  Automatically
+        restores the session if expired.
+
+        Args:
+            **kwargs: Arbitrary keyword arguments forwarded to the RPC
+                call (typically ``content`` with raw HTML).
+
+        Returns:
+            Dictionary containing the sanitized HTML under the
+            ``sanitized`` key (and possibly other metadata).
+        """
         if self._session.needs_refresh:
             await self._session.refresh()
         from piazza_sdk.domain.generic import sanitize_html  # noqa: PLC0415

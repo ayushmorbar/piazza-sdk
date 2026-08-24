@@ -316,14 +316,14 @@ async def test_dual_role_complete_lifecycle():  # noqa: PLR0915
             await instructor_network.unpin_post(post_id)
             logger.info("✓ [Instructor] Pin & Unpin post OK")
 
-            # 9. Lock Post
-            await instructor_network.lock_post(post_id)
-            logger.info("✓ [Instructor] Lock post OK")
-
-            # 10. Resolve Post
+            # 9. Resolve Post (before lock — Piazza rejects resolving locked posts)
             resolved = await instructor_network.resolve_post(post_id)
             assert resolved
             logger.info("✓ [Instructor] Resolve post OK")
+
+            # 10. Lock Post
+            await instructor_network.lock_post(post_id)
+            logger.info("✓ [Instructor] Lock post OK")
 
             # 11. Add Tag
             await instructor_network.add_tag(post_id, "test_tag")

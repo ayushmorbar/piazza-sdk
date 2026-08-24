@@ -125,4 +125,4 @@ pyrightconfig.json
 
 # miscellaneous
 temp_src
-scratch/
+.scratch/

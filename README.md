@@ -28,7 +28,7 @@ pip install piazza-sdk
 ## Quick Start
 
 ```python
-from piazza_sdk import Piazza, SessionConfig, PiazzaSession
+from piazza_sdk import Piazza, SessionConfig, SessionStateManager
 
 async def main():
     config = SessionConfig(
@@ -36,7 +36,7 @@ async def main():
         user_agent="my-app/1.0",
     )
 
-    async with PiazzaSession(config) as session:
+    async with SessionStateManager(config) as session:
         await session.login(email="your@email.com", password="your_password")
         piazza = Piazza(session)
 

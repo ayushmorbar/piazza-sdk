@@ -14,47 +14,37 @@ import asyncio
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
-from piazza_sdk.domain.feed import get_feed as _domain_get_feed  # noqa: PLC0415
-from piazza_sdk.domain.feed import get_similar_posts as _domain_get_similar_posts  # noqa: PLC0415
-from piazza_sdk.domain.network import add_students as _domain_add_students  # noqa: PLC0415
-from piazza_sdk.domain.network import remove_users as _domain_remove_users  # noqa: PLC0415
+from piazza_sdk.domain.feed import get_feed as _domain_get_feed
+from piazza_sdk.domain.feed import get_similar_posts as _domain_get_similar_posts
+from piazza_sdk.domain.network import add_students as _domain_add_students
+from piazza_sdk.domain.network import remove_users as _domain_remove_users
+from piazza_sdk.domain.network import update_course_description as _domain_update_course_description
 from piazza_sdk.domain.network import (
-    update_course_description as _domain_update_course_description,  # noqa: PLC0415
+    update_general_information as _domain_update_general_information,
 )
-from piazza_sdk.domain.network import (
-    update_general_information as _domain_update_general_information,  # noqa: PLC0415
-)
-from piazza_sdk.domain.network import (
-    update_office_hours as _domain_update_office_hours,  # noqa: PLC0415
-)
-from piazza_sdk.domain.posts import add_followup as _domain_add_followup  # noqa: PLC0415
-from piazza_sdk.domain.posts import add_tag as _domain_add_tag  # noqa: PLC0415
-from piazza_sdk.domain.posts import answer_post as _domain_answer_post  # noqa: PLC0415
-from piazza_sdk.domain.posts import create_folder as _domain_create_folder  # noqa: PLC0415
-from piazza_sdk.domain.posts import create_post as _domain_create_post  # noqa: PLC0415
-from piazza_sdk.domain.posts import delete_post as _domain_delete_post  # noqa: PLC0415
-from piazza_sdk.domain.posts import endorse as _domain_endorse  # noqa: PLC0415
-from piazza_sdk.domain.posts import mark_as_unread as _domain_mark_as_unread  # noqa: PLC0415
-from piazza_sdk.domain.posts import mark_duplicate as _domain_mark_duplicate  # noqa: PLC0415
-from piazza_sdk.domain.posts import pin_post as _domain_pin_post  # noqa: PLC0415
-from piazza_sdk.domain.posts import remove_tag as _domain_remove_tag  # noqa: PLC0415
-from piazza_sdk.domain.posts import resolve_post as _domain_resolve_post  # noqa: PLC0415
-from piazza_sdk.domain.posts import save_draft as _domain_save_draft  # noqa: PLC0415
-from piazza_sdk.domain.posts import unpin_post as _domain_unpin_post  # noqa: PLC0415
-from piazza_sdk.domain.posts import upload_asset as _domain_upload_asset  # noqa: PLC0415
-from piazza_sdk.domain.preferences import (
-    get_preferences as _domain_get_preferences,  # noqa: PLC0415
-)
-from piazza_sdk.domain.preferences import (
-    update_preferences as _domain_update_preferences,  # noqa: PLC0415
-)
-from piazza_sdk.domain.search import search as _domain_search  # noqa: PLC0415
-from piazza_sdk.domain.statistics import get_statistics as _domain_get_statistics  # noqa: PLC0415
-from piazza_sdk.domain.users import get_all_users as _domain_get_all_users  # noqa: PLC0415
-from piazza_sdk.domain.users import (
-    get_instructor_stats as _domain_get_instructor_stats,  # noqa: PLC0415
-)
-from piazza_sdk.domain.users import get_online_users as _domain_get_online_users  # noqa: PLC0415
+from piazza_sdk.domain.network import update_office_hours as _domain_update_office_hours
+from piazza_sdk.domain.posts import add_followup as _domain_add_followup
+from piazza_sdk.domain.posts import add_tag as _domain_add_tag
+from piazza_sdk.domain.posts import answer_post as _domain_answer_post
+from piazza_sdk.domain.posts import create_folder as _domain_create_folder
+from piazza_sdk.domain.posts import create_post as _domain_create_post
+from piazza_sdk.domain.posts import delete_post as _domain_delete_post
+from piazza_sdk.domain.posts import endorse as _domain_endorse
+from piazza_sdk.domain.posts import mark_as_unread as _domain_mark_as_unread
+from piazza_sdk.domain.posts import mark_duplicate as _domain_mark_duplicate
+from piazza_sdk.domain.posts import pin_post as _domain_pin_post
+from piazza_sdk.domain.posts import remove_tag as _domain_remove_tag
+from piazza_sdk.domain.posts import resolve_post as _domain_resolve_post
+from piazza_sdk.domain.posts import save_draft as _domain_save_draft
+from piazza_sdk.domain.posts import unpin_post as _domain_unpin_post
+from piazza_sdk.domain.posts import upload_asset as _domain_upload_asset
+from piazza_sdk.domain.preferences import get_preferences as _domain_get_preferences
+from piazza_sdk.domain.preferences import update_preferences as _domain_update_preferences
+from piazza_sdk.domain.search import search as _domain_search
+from piazza_sdk.domain.statistics import get_statistics as _domain_get_statistics
+from piazza_sdk.domain.users import get_all_users as _domain_get_all_users
+from piazza_sdk.domain.users import get_instructor_stats as _domain_get_instructor_stats
+from piazza_sdk.domain.users import get_online_users as _domain_get_online_users
 from piazza_sdk.exceptions import FeedError, NotFoundError, PiazzaSDKError, ValidationError
 from piazza_sdk.models.feed import Feed, FeedFilter, FeedItem, FolderFilter
 from piazza_sdk.models.network import HallOfFameItem, Statistics

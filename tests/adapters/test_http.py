@@ -688,20 +688,20 @@ class TestRPCNonDictResponse:
         assert result == {}
 
 
-async def test_content_pin_unpin(mock_rpc):
-    mock_rpc.client.post.return_value = httpx.Response(200, json={"result": {}})
-    await mock_rpc.content_pin("p1")
-    await mock_rpc.content_unpin("p1")
-    assert mock_rpc.client.post.call_count == 2
+async def test_content_pin_unpin():
+    rpc = _make_rpc(_make_session(_mock_client(200, {"result": {}})))
+    await rpc.content_pin("p1")
+    await rpc.content_unpin("p1")
+    assert rpc._session.client.request.call_count == 2
 
 
-async def test_content_duplicate(mock_rpc):
-    mock_rpc.client.post.return_value = httpx.Response(200, json={"result": {}})
-    await mock_rpc.content_duplicate("dup", "master", "msg")
-    assert mock_rpc.client.post.call_count == 1
+async def test_content_duplicate():
+    rpc = _make_rpc(_make_session(_mock_client(200, {"result": {}})))
+    await rpc.content_duplicate("dup", "master", "msg")
+    assert rpc._session.client.request.call_count == 1
 
 
-async def test_user_status(mock_rpc):
-    mock_rpc.client.post.return_value = httpx.Response(200, json={"result": {"status": "ok"}})
-    res = await mock_rpc.user_status()
+async def test_user_status():
+    rpc = _make_rpc(_make_session(_mock_client(200, {"result": {"status": "ok"}})))
+    res = await rpc.user_status()
     assert res == {"status": "ok"}

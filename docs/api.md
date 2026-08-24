@@ -44,7 +44,7 @@ export PIAZZA_COURSE_ID="your_course_id"
 export PIAZZA_TIMEOUT="60"
 ```
 
-::: piazza_sdk.auth.SessionConfig
+::: piazza_sdk.config.SessionConfig
     options:
       show_source: false
 
@@ -209,10 +209,10 @@ stats = await network.get_instructor_stats()
 ### Search & Statistics
 
 ```python
-# Search posts
+# Search posts (returns a Feed object)
 results = await network.search(query="exam review")
-for item in results.items:
-    print(item.title)
+for item in results.feed:
+    print(item.subject)
 
 # Get network statistics
 stats = await network.get_statistics()
@@ -290,10 +290,10 @@ except PiazzaSDKError as e:
 
 ```python
 feed = await network.get_feed()
-print(f"Total items: {len(feed.items)}")
+print(f"Total items: {len(feed.feed)}")
 
-for item in feed.items:
-    print(f"[{item.type}] {item.title} — {item.author}")
+for item in feed.feed:
+    print(f"[{item.type}] {item.subject}")
 ```
 
 ::: piazza_sdk.models.feed.Feed

@@ -2,7 +2,13 @@
 
 from typing import TYPE_CHECKING, Any
 
-__all__ = ["update_course_description", "update_general_information", "update_office_hours"]
+__all__ = [
+    "update_course_description",
+    "update_general_information",
+    "update_office_hours",
+    "add_students",
+    "remove_users",
+]
 
 if TYPE_CHECKING:
     from piazza_sdk.api.rpc import RPC
@@ -64,4 +70,38 @@ async def update_course_description(
         The raw API response dictionary.
     """
     payload = {"course_description": description}
+    return await rpc.network_update(**payload)
+
+
+async def add_students(
+    rpc: "RPC", *, session: "SessionStateManager | None" = None, emails: list[str]
+) -> dict[str, Any]:
+    """Enroll students into the course.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager.
+        emails: List of email addresses to enroll.
+
+    Returns:
+        The raw API response dictionary.
+    """
+    payload = {"from": "ClassSettingsPage", "add_students": emails}
+    return await rpc.network_update(**payload)
+
+
+async def remove_users(
+    rpc: "RPC", *, session: "SessionStateManager | None" = None, user_ids: list[str]
+) -> dict[str, Any]:
+    """Remove users from the course.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager.
+        user_ids: List of user IDs to remove.
+
+    Returns:
+        The raw API response dictionary.
+    """
+    payload = {"remove_users": user_ids}
     return await rpc.network_update(**payload)

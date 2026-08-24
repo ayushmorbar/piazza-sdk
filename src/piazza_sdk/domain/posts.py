@@ -18,9 +18,11 @@ __all__ = [
     "resolve_post",
     "save_draft",
     "upload_asset",
+    "pin_post",
+    "unpin_post",
+    "mark_duplicate",
 ]
 
-import asyncio
 import mimetypes
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -142,13 +144,55 @@ async def add_followup(  # noqa: PLR0913
     return PostCreatedResponse.model_validate(result)
 
 
-async def answer_post(
+async def create_reply(  # noqa: PLR0913
+    rpc: RPC,
+    *,
+    session: SessionStateManager | None = None,
+    post_id: str,
+    content: str,
+    anonymous: bool = False,
+    options: PublishingOptions | None = None,
+    **kwargs: Any,
+) -> PostCreatedResponse:
+    """Add a reply (feedback) to an existing follow-up.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager for automatic refresh.
+        post_id: ID of the follow-up (the parent of this reply).
+        content: Reply content.
+        anonymous: Whether to post anonymously.
+        options: Publishing options.
+        **kwargs: Additional parameters.
+
+    Returns:
+        PostCreatedResponse with new reply ID.
+
+    Raises:
+        ValidationError: If content is empty.
+    """
+    if not content or not content.strip():
+        raise ValidationError("content must be non-empty")
+    extra = dict(kwargs)
+    if options is not None:
+        extra.update(options.to_kwargs())
+    anon_str = "stud" if anonymous else "no"
+    raw = await rpc.content_create(
+        type="feedback", cid=post_id, subject=content, content=content, anonymous=anon_str, **extra
+    )
+    result = raw.get("result", raw)
+    return PostCreatedResponse.model_validate(result)
+
+
+async def answer_post(  # noqa: PLR0913
     rpc: RPC,
     *,
     session: SessionStateManager | None = None,
     post_id: str,
     content: str,
     instructor_answer: bool = False,
+    anonymous: bool = False,
+    revision: int = 1,
 ) -> None:
     """Answer an existing post.
 
@@ -158,6 +202,8 @@ async def answer_post(
         post_id: ID of the post to answer.
         content: Answer content.
         instructor_answer: Whether this is an instructor answer.
+        anonymous: Whether to post anonymously (students only).
+        revision: Revision number; must exceed the current answer's history size.
 
     Raises:
         ValidationError: If post_id or content is empty.
@@ -169,7 +215,9 @@ async def answer_post(
     if not content or not content.strip():
         raise ValidationError("content must be non-empty")
     try:
-        await rpc.content_answer(post_id, content, instructor_answer)
+        await rpc.content_answer(
+            post_id, content, instructor_answer, anonymous=anonymous, revision=revision
+        )
     except (NotFoundError, PiazzaSDKError):
         raise
     except Exception as exc:
@@ -326,31 +374,7 @@ async def resolve_post(
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
-    post_data: dict[str, Any] = {}
-    if hasattr(rpc, "content_get"):
-        res = rpc.content_get(post_id)
-        if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
-            post_data = await res
-        elif isinstance(res, dict):
-            post_data = res
-
-    history_entries = post_data.get("history", [])
-    first_hist = (
-        history_entries[0] if history_entries and isinstance(history_entries[0], dict) else {}
-    )
-    subject = first_hist.get("subject", post_data.get("subject", ""))
-    content = first_hist.get("content", post_data.get("content", ""))
-    folders = post_data.get("folders", ["other"])
-    raw = await rpc.content_update(
-        cid=post_id,
-        subject=subject,
-        content=content,
-        folders=folders,
-        anonymous=post_data.get("default_anonymity", "no"),
-        status="resolved",
-    )
-    # Mirror delete_post: sparse/empty bodies are success (verified live);
-    # only an explicitly failed result value counts as failure.
+    raw = await rpc.content_mark_resolved(post_id)
     if not isinstance(raw, dict):
         return True
     return raw.get("result", "success") in (None, "success")
@@ -580,4 +604,58 @@ async def auto_save_draft(  # noqa: PLR0913
     editor: str = "rte",
 ) -> bool:
     await rpc.content_auto_save(post_id, type, body, revision, editor)
+    return True
+
+
+async def pin_post(rpc: RPC, *, session: SessionStateManager | None = None, post_id: str) -> bool:
+    """Pin a post.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager.
+        post_id: The ID of the post to pin.
+
+    Returns:
+        True if successful.
+    """
+    await rpc.content_pin(post_id)
+    return True
+
+
+async def unpin_post(rpc: RPC, *, session: SessionStateManager | None = None, post_id: str) -> bool:
+    """Unpin a post.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager.
+        post_id: The ID of the post to unpin.
+
+    Returns:
+        True if successful.
+    """
+    await rpc.content_unpin(post_id)
+    return True
+
+
+async def mark_duplicate(
+    rpc: RPC,
+    *,
+    session: SessionStateManager | None = None,
+    duplicate_id: str,
+    master_id: str,
+    message: str = "",
+) -> bool:
+    """Mark a post as a duplicate of another post.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager.
+        duplicate_id: The ID of the post that is a duplicate.
+        master_id: The ID of the post to keep.
+        message: Optional reason or message for duplication.
+
+    Returns:
+        True if successful.
+    """
+    await rpc.content_duplicate(duplicate_id, master_id, message)
     return True

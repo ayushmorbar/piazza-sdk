@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 from piazza_sdk.domain.feed import get_feed as _domain_get_feed  # noqa: PLC0415
 from piazza_sdk.domain.feed import get_similar_posts as _domain_get_similar_posts  # noqa: PLC0415
+from piazza_sdk.domain.network import add_students as _domain_add_students  # noqa: PLC0415
+from piazza_sdk.domain.network import remove_users as _domain_remove_users  # noqa: PLC0415
 from piazza_sdk.domain.network import (
     update_course_description as _domain_update_course_description,  # noqa: PLC0415
 )
@@ -33,9 +35,12 @@ from piazza_sdk.domain.posts import create_post as _domain_create_post  # noqa: 
 from piazza_sdk.domain.posts import delete_post as _domain_delete_post  # noqa: PLC0415
 from piazza_sdk.domain.posts import endorse as _domain_endorse  # noqa: PLC0415
 from piazza_sdk.domain.posts import mark_as_unread as _domain_mark_as_unread  # noqa: PLC0415
+from piazza_sdk.domain.posts import mark_duplicate as _domain_mark_duplicate  # noqa: PLC0415
+from piazza_sdk.domain.posts import pin_post as _domain_pin_post  # noqa: PLC0415
 from piazza_sdk.domain.posts import remove_tag as _domain_remove_tag  # noqa: PLC0415
 from piazza_sdk.domain.posts import resolve_post as _domain_resolve_post  # noqa: PLC0415
 from piazza_sdk.domain.posts import save_draft as _domain_save_draft  # noqa: PLC0415
+from piazza_sdk.domain.posts import unpin_post as _domain_unpin_post  # noqa: PLC0415
 from piazza_sdk.domain.posts import upload_asset as _domain_upload_asset  # noqa: PLC0415
 from piazza_sdk.domain.preferences import (
     get_preferences as _domain_get_preferences,  # noqa: PLC0415
@@ -317,6 +322,41 @@ class Network:
             **kwargs,
         )
 
+    async def create_reply(
+        self,
+        post: str | Post,
+        content: str,
+        anonymous: bool = False,
+        options: PublishingOptions | None = None,
+        **kwargs: Any,
+    ) -> PostCreatedResponse:
+        """Add a reply (feedback) to an existing follow-up.
+
+        Args:
+            post: Follow-up ID string or Post model.
+            content: Reply content.
+            anonymous: Whether to post anonymously.
+            options: Publishing options.
+
+        Returns:
+            PostCreatedResponse with new reply ID.
+
+        Raises:
+            ValidationError: If content is empty.
+        """
+        post_id = post if isinstance(post, str) else post.id
+        await self._ensure_session()
+        from piazza_sdk.domain.posts import create_reply as _domain_create_reply  # noqa: PLC0415
+
+        return await _domain_create_reply(
+            self._rpc,
+            post_id=post_id,
+            content=content,
+            anonymous=anonymous,
+            options=options,
+            **kwargs,
+        )
+
     async def resolve_post(self, post_id: str) -> bool:
         """Mark a post as resolved.
 
@@ -332,8 +372,13 @@ class Network:
         await self._ensure_session()
         return await _domain_resolve_post(self._rpc, post_id=post_id)
 
-    async def answer_post(
-        self, post_id: str, content: str, instructor_answer: bool = False
+    async def answer_post(  # noqa: PLR0913
+        self,
+        post_id: str,
+        content: str,
+        instructor_answer: bool = False,
+        anonymous: bool = False,
+        revision: int = 1,
     ) -> None:
         """Post an answer to a question.
 
@@ -341,13 +386,20 @@ class Network:
             post_id: The post's unique identifier.
             content: Answer content (HTML or plain text).
             instructor_answer: Whether this is an official instructor answer.
+            anonymous: Whether to post anonymously (students only).
+            revision: Revision number; must exceed the current answer's history size.
 
         Raises:
             ValidationError: If post_id or content is empty.
         """
         await self._ensure_session()
         await _domain_answer_post(
-            self._rpc, post_id=post_id, content=content, instructor_answer=instructor_answer
+            self._rpc,
+            post_id=post_id,
+            content=content,
+            instructor_answer=instructor_answer,
+            anonymous=anonymous,
+            revision=revision,
         )
 
     async def endorse_post(self, post_id: str, as_instructor_badge: bool = False) -> Post:
@@ -426,7 +478,7 @@ class Network:
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
         await self._ensure_session()
-        await self._rpc.content_pin(post_id)
+        await _domain_pin_post(self._rpc, post_id=post_id)
         return await self.get_post(post_id)
 
     async def unpin_post(self, post_id: str) -> Post:
@@ -444,8 +496,23 @@ class Network:
         if not post_id or not post_id.strip():
             raise ValidationError("post_id must be non-empty")
         await self._ensure_session()
-        await self._rpc.content_unpin(post_id)
+        await _domain_unpin_post(self._rpc, post_id=post_id)
         return await self.get_post(post_id)
+
+    async def mark_duplicate(self, duplicate_id: str, master_id: str, message: str = "") -> None:
+        """Mark a post as a duplicate of another post.
+
+        Args:
+            duplicate_id: The ID of the post that is a duplicate.
+            master_id: The ID of the post to keep.
+            message: Optional reason or message for duplication.
+        """
+        if not duplicate_id or not master_id:
+            raise ValidationError("duplicate_id and master_id must be non-empty")
+        await self._ensure_session()
+        await _domain_mark_duplicate(
+            self._rpc, duplicate_id=duplicate_id, master_id=master_id, message=message
+        )
 
     async def lock_post(self, post_id: str) -> Post:
         """Lock a post by adding the 'lock' tag.
@@ -545,6 +612,28 @@ class Network:
         )
 
     # ── Users ─────────────────────────────────────────────────────────
+
+    async def add_students(self, emails: list[str]) -> None:
+        """Enroll students into the course.
+
+        Args:
+            emails: List of email addresses to enroll.
+        """
+        if not emails:
+            return
+        await self._ensure_session()
+        await _domain_add_students(self._rpc, emails=emails)
+
+    async def remove_users(self, user_ids: list[str]) -> None:
+        """Remove users from the course.
+
+        Args:
+            user_ids: List of user IDs to remove.
+        """
+        if not user_ids:
+            return
+        await self._ensure_session()
+        await _domain_remove_users(self._rpc, user_ids=user_ids)
 
     async def get_users(self) -> list[User]:
         """Get all users in the network.

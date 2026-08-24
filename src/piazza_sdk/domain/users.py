@@ -5,7 +5,7 @@ Provides standalone functions for user retrieval and instructor statistics.
 
 from __future__ import annotations
 
-__all__ = ["get_all_users", "get_instructor_stats", "get_online_users"]
+__all__ = ["get_all_users", "get_instructor_stats", "get_online_users", "get_user_status"]
 
 from typing import TYPE_CHECKING, Any
 
@@ -109,6 +109,27 @@ async def unset_user_stat(
 ) -> bool:
     await rpc.user_unset(stat)
     return True
+
+
+async def get_user_status(
+    rpc: RPC, *, session: SessionStateManager | None = None
+) -> dict[str, Any]:
+    """Get the global user status containing enrolled classes and profile data.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager for automatic refresh.
+
+    Returns:
+        Raw user status dictionary.
+
+    Raises:
+        UserError: On unexpected errors.
+    """
+    try:
+        return await rpc.user_status()
+    except Exception as exc:
+        raise UserError(f"Failed to get user status: {exc}") from exc
 
 
 async def get_my_events_info(

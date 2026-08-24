@@ -383,8 +383,8 @@ class Post(BaseModel):
     status: PostStatus = Field(default=PostStatus.ACTIVE, description="Post lifecycle status")
     views: int = Field(default=0, description="Total view count")
     unique_views: int | None = Field(default=None, description="Unique viewer count")
-    default_anonymity: bool = Field(
-        default=False, description="Whether post is anonymous by default"
+    default_anonymity: str | bool = Field(
+        default=False, description="Whether the post is anonymous by default"
     )
     is_mine: bool = Field(default=False, description="Whether the current user authored this post")
     no_answer: bool = Field(default=False, description="Whether no answer has been accepted")

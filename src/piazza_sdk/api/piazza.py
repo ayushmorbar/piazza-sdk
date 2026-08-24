@@ -135,6 +135,21 @@ class Piazza:
         except Exception as exc:
             raise PiazzaSDKError(f"Failed to get user profile: {exc}") from exc
 
+    async def get_user_status(self) -> dict[str, Any]:
+        """Get the global user status (contains enrolled classes and profile data).
+
+        Uses the canonical ``user.status`` RPC method.
+        Automatically restores the session if expired.
+
+        Returns:
+            Raw user status dictionary.
+        """
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.users import get_user_status  # noqa: PLC0415
+
+        return await get_user_status(self._get_user_rpc())
+
     async def get_my_events_info(self) -> dict[str, Any]:
         if self._session.needs_refresh:
             await self._session.refresh()

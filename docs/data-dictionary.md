@@ -1429,3 +1429,37 @@ An empty array `[]` clears the general information.
   }
 }
 ```
+
+### Add Students
+```json
+{
+  "method": "network.update",
+  "params": {
+    "id": "network_id",
+    "from": "ClassSettingsPage",
+    "add_students": ["student@example.com"]
+  }
+}
+```
+
+### Remove Users
+```json
+{
+  "method": "network.update",
+  "params": {
+    "id": "network_id",
+    "remove_users": ["user_id_123"]
+  }
+}
+```
+
+## 12) user.status
+This JSON-RPC method is used to get the global status of the authenticated user, including their enrolled classes and system-wide notifications.
+Unlike most content endpoints, it resides at `/main/api`, not `/logic/api`.
+
+```json
+{
+  "method": "user.status",
+  "params": {}
+}
+```

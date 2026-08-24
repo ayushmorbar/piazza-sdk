@@ -372,6 +372,58 @@ class RPC:
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to update content"
         )
 
+    async def content_mark_resolved(self, post_id: str, resolved: bool = True) -> dict[str, Any]:
+        """Mark a post as resolved using content.mark_resolved."""
+        payload = {
+            "method": "content.mark_resolved",
+            "params": {
+                "nid": self._nid,
+                "cid": post_id,
+                "resolved": resolved,
+                "aid": self._last_aid,
+            },
+        }
+        return await self._safe_call(
+            "/logic/api",
+            payload,
+            error_cls=ContentError,
+            error_msg=f"Failed to resolve post {post_id}",
+        )
+
+    async def content_duplicate(
+        self, duplicate_id: str, master_id: str, message: str = ""
+    ) -> dict[str, Any]:
+        """Mark a post as a duplicate of another post."""
+        payload = {
+            "method": "content.duplicate",
+            "params": {
+                "nid": self._nid,
+                "cid_dupe": duplicate_id,
+                "cid_to": master_id,
+                "msg": message,
+                "aid": self._last_aid,
+            },
+        }
+        return await self._safe_call(
+            "/logic/api",
+            payload,
+            error_cls=ContentError,
+            error_msg=f"Failed to mark post {duplicate_id} as duplicate of {master_id}",
+        )
+
+    async def content_resolve(self, post_id: str) -> dict[str, Any]:
+        """Mark a post as resolved."""
+        payload = {
+            "method": "content.mark_resolved",
+            "params": {"nid": self._nid, "cid": post_id, "resolved": True, "aid": self._last_aid},
+        }
+        return await self._safe_call(
+            "/logic/api",
+            payload,
+            error_cls=ContentError,
+            error_msg=f"Failed to resolve post {post_id}",
+        )
+
     async def content_delete(self, post_id: str) -> dict[str, Any]:
         """Delete a post."""
         payload = {
@@ -584,6 +636,13 @@ class RPC:
             await self._request("POST", "/logic/api", json=payload)
         except PiazzaSDKError as exc:
             raise UserError(f"Failed to update user preferences: {exc}") from exc
+
+    async def user_status(self) -> dict[str, Any]:
+        """Get the global user status (contains enrolled classes, etc.)."""
+        payload = {"method": "user.status", "params": {}}
+        return await self._safe_call(
+            "/main/api", payload, error_cls=UserError, error_msg="Failed to get user status"
+        )
 
     async def mark_as_unread(self, post_id: str) -> dict[str, Any]:
         """Mark a post as unread for the current user.

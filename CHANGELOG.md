@@ -7,7 +7,15 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.MM.DD`).
 
 ## [Unreleased]
 
-## [2026.08.24] - 2026-08-24
+## [2026.08.24.2] - 2026-08-24
+
+### Added
+- Added fail-fast credential validation in `PiazzaConfig` (`course_id`) and `SessionStateManager.login()` (`email` and `password`).
+- Configured connection pool limits for `httpx.AsyncClient` (`max_connections=20`, `max_keepalive_connections=5`).
+- Injected uniform random jitter into the exponential retry backoff mechanism to prevent thundering herd effects.
+- Enhanced embedded error detection (`RPC._check_embedded_error`) to strictly inspect JSON fields (`error`, `status`, `detail`, `message`) before falling back, preventing false-positives on post content.
+
+## [2026.08.24.1] - 2026-08-24
 
 ### Added
 

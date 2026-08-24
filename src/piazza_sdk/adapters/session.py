@@ -90,8 +90,12 @@ class SessionStateManager:
         """
         headers = self._default_headers()
         headers["Referer"] = f"{self.config.base_url}/class/{self.config.course_id}"
+        limits = httpx.Limits(max_connections=20, max_keepalive_connections=5)
         return httpx.AsyncClient(
-            timeout=httpx.Timeout(self.config.timeout), headers=headers, follow_redirects=True
+            timeout=httpx.Timeout(self.config.timeout),
+            headers=headers,
+            follow_redirects=True,
+            limits=limits,
         )
 
     @property
@@ -148,6 +152,8 @@ class SessionStateManager:
             raise SessionClosedError("Cannot login — session is closed.")
         if self._state == SessionState.AUTHENTICATED:
             raise AuthenticationError("Already authenticated.")
+        if not email or not email.strip() or not password or not password.strip():
+            raise AuthenticationError("Email and password cannot be empty or whitespace.")
 
         self._state = SessionState.AUTHENTICATING
         self._email = email

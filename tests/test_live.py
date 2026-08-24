@@ -387,7 +387,9 @@ async def test_cookie_persistence_and_encryption_live():
 @pytest.mark.asyncio
 async def test_live_throttle_activates():
     """Live test: throttle delays requests when enabled."""
-    config = PiazzaConfig(course_id=COURSE_ID, throttle_min_delay=1.0, throttle_max_delay=1.5)
+    config = PiazzaConfig(
+        course_id=COURSE_ID, throttle_enabled=True, throttle_min_delay=1.0, throttle_max_delay=1.5
+    )
     async with SessionStateManager(config) as session:
         await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
         network = Network(
@@ -408,7 +410,9 @@ async def test_live_throttle_activates():
 @pytest.mark.asyncio
 async def test_live_throttle_idle_reset():
     """Live test: idle timeout resets throttle so next request is fast."""
-    config = PiazzaConfig(course_id=COURSE_ID, throttle_min_delay=1.0, throttle_max_delay=1.5)
+    config = PiazzaConfig(
+        course_id=COURSE_ID, throttle_enabled=True, throttle_min_delay=1.0, throttle_max_delay=1.5
+    )
     async with SessionStateManager(config) as session:
         await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
         network = Network(
@@ -432,7 +436,9 @@ async def test_live_throttle_idle_reset():
 @pytest.mark.asyncio
 async def test_live_throttle_multiple_rapid_requests():
     """Live test:3 rapid throttled requests are properly paced."""
-    config = PiazzaConfig(course_id=COURSE_ID, throttle_min_delay=1.0, throttle_max_delay=1.5)
+    config = PiazzaConfig(
+        course_id=COURSE_ID, throttle_enabled=True, throttle_min_delay=1.0, throttle_max_delay=1.5
+    )
     async with SessionStateManager(config) as session:
         await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
         network = Network(

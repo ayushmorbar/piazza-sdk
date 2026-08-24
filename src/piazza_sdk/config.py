@@ -41,6 +41,14 @@ class PiazzaConfig(BaseSettings):
     course_id: str = Field(description="The Piazza course/network ID (e.g. 'j1b2c3d4e5f6')")
     user_agent: str = Field(default=_DEFAULT_USER_AGENT, description="Custom User-Agent string")
     sec_ch_ua_platform: str = Field(default="Windows")
+
+    @field_validator("course_id")
+    @classmethod
+    def _validate_course_id(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("course_id cannot be empty or whitespace")
+        return v
+
     base_url: str = Field(default=PIAZZA_BASE_URL, description="Base URL for the Piazza API")
     timeout: float = Field(default=30.0, description="HTTP request timeout in seconds")
     retries: int = Field(default=3, description="Number of retry attempts for transient failures")

@@ -107,7 +107,8 @@ def _compute_retry_wait(retry_state: RetryCallState) -> float:
     if isinstance(outcome_exc, RateLimitError) and outcome_exc.retry_after_ms:
         return min(float(outcome_exc.retry_after_ms) / 1000.0, _RATE_LIMIT_MAX_WAIT_S)
     delay = _RETRY_BASE_DELAY_S * (2 ** max(retry_state.attempt_number - 1, 0))
-    return float(min(delay, _RETRY_MAX_WAIT_S))
+    jitter = random.uniform(0, _RETRY_BASE_DELAY_S)
+    return float(min(delay + jitter, _RETRY_MAX_WAIT_S))
 
 
 def _check_embedded_error(result: Any) -> None:
@@ -120,19 +121,15 @@ def _check_embedded_error(result: Any) -> None:
         return
 
     # Check for explicit error field
-    error_msg = result.get("error")
-    if error_msg and isinstance(error_msg, str):
-        lower = error_msg.lower()
-        if "not found" in lower or "does not exist" in lower or "cannot be found" in lower:
-            logger.warning("Embedded error detected in response body: %s", error_msg)
-            raise NotFoundError(error_msg, response_body=result)
-
-    # Check for error string in stringified result
-    result_str = str(result).lower()
     patterns = ("not found", "does not exist", "cannot be found")
-    if any(p in result_str for p in patterns):
-        logger.warning("Embedded error detected in stringified response: %s", result_str[:200])
-        raise NotFoundError(f"Resource not found: {result_str[:200]}", response_body=result)
+
+    for field in ("error", "status", "detail", "message"):
+        val = result.get(field)
+        if val and isinstance(val, str):
+            lower = val.lower()
+            if any(p in lower for p in patterns):
+                logger.warning("Embedded error detected in field '%s': %s", field, val[:200])
+                raise NotFoundError(f"Resource not found: {val[:200]}", response_body=result)
 
 
 class RPC:

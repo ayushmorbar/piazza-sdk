@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import random
+import time
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import httpx
@@ -108,6 +110,31 @@ def _compute_retry_wait(retry_state: RetryCallState) -> float:
     return float(min(delay, _RETRY_MAX_WAIT_S))
 
 
+def _check_embedded_error(result: Any) -> None:
+    """Inspect a successful response body for embedded error indicators.
+
+    Some Piazza endpoints return HTTP 200 with an error payload in the body.
+    This catches those cases and maps them to typed SDK exceptions.
+    """
+    if not isinstance(result, dict):
+        return
+
+    # Check for explicit error field
+    error_msg = result.get("error")
+    if error_msg and isinstance(error_msg, str):
+        lower = error_msg.lower()
+        if "not found" in lower or "does not exist" in lower or "cannot be found" in lower:
+            logger.warning("Embedded error detected in response body: %s", error_msg)
+            raise NotFoundError(error_msg, response_body=result)
+
+    # Check for error string in stringified result
+    result_str = str(result).lower()
+    patterns = ("not found", "does not exist", "cannot be found")
+    if any(p in result_str for p in patterns):
+        logger.warning("Embedded error detected in stringified response: %s", result_str[:200])
+        raise NotFoundError(f"Resource not found: {result_str[:200]}", response_body=result)
+
+
 class RPC:
     """Low-level RPC client for Piazza's internal API.
 
@@ -161,10 +188,50 @@ class RPC:
         )
         self._retry_sleep = retry_sleep
 
+        self._last_request_time: float = 0.0
+        config = getattr(session, "config", None)
+        self._throttle_enabled: bool = getattr(config, "throttle_enabled", False)
+        self._throttle_min_delay: float = getattr(config, "throttle_min_delay", 1.0)
+        self._throttle_max_delay: float = getattr(config, "throttle_max_delay", 3.0)
+        self._throttle_idle_timeout: float = getattr(config, "throttle_idle_timeout", 30.0)
+
     @property
     def client(self) -> httpx.AsyncClient:
         """Return the current httpx client from the session adapter."""
         return self._session.client
+
+    async def _throttle(self) -> None:
+        """Insert a uniform-random delay between consecutive requests.
+
+        The delay is skipped entirely when:
+        * ``throttle_enabled`` is ``False`` (the default), or
+        * the time since the last request exceeds ``throttle_idle_timeout``
+          (user was idle / browsing casually).
+        """
+        if not self._throttle_enabled:
+            return
+
+        now = time.monotonic()
+        elapsed = now - self._last_request_time
+
+        # Idle reset: user was away long enough — no throttle needed.
+        if elapsed >= self._throttle_idle_timeout:
+            self._last_request_time = now
+            return
+
+        delay = random.uniform(self._throttle_min_delay, self._throttle_max_delay)
+        remaining = delay - elapsed
+        if remaining > 0:
+            logger.debug(
+                "Throttling for %.2fs (elapsed %.2fs, range [%.2f, %.2f])",
+                remaining,
+                elapsed,
+                self._throttle_min_delay,
+                self._throttle_max_delay,
+            )
+            await asyncio.sleep(remaining)
+
+        self._last_request_time = time.monotonic()
 
     async def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
         """Make an HTTP request with retry and error handling.
@@ -177,6 +244,7 @@ class RPC:
 
         Client errors (other 4xx) propagate immediately as typed SDK exceptions.
         """
+        await self._throttle()
         retryer = AsyncRetrying(
             retry=retry_if_exception(_is_retryable),
             stop=stop_after_attempt(self._max_attempts),
@@ -278,15 +346,11 @@ class RPC:
         if "result" in raw:
             rpc_error = raw.get("error")
             if rpc_error is not None:
-                # Piazza reports unknown RPC methods as embedded errors
-                # (e.g. "Method not found: get_user_preferences") rather
-                # than HTTP 404 — normalize them to NotFoundError so
-                # callers can feature-detect reliably.
-                text = str(rpc_error)
-                if "method not found" in text.lower():
-                    raise NotFoundError(f"RPC method not available: {text}")
+                _check_embedded_error(raw)
                 raise error_cls(f"{error_msg}: {rpc_error}")
+            _check_embedded_error(raw["result"])
             return raw["result"]
+        _check_embedded_error(raw)
         return raw
 
     async def _safe_call(

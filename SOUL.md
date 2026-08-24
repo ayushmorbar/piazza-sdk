@@ -44,4 +44,4 @@ When facing a choice:
 - Dependencies: httpx, pydantic v2, cryptography, tenacity
 - Dev tools: ruff, mypy, pytest, pre-commit
 - 560 tests offline (all passing) + 6 live tests (`pytest -m live`, env-gated)
-- CalVer versioning: `YYYY.MM.PATCH`
+- CalVer versioning: `YYYY.MM.DD`

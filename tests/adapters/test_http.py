@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import time
 from datetime import timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
-from piazza_sdk.adapters.http import RPC, _AuthRetryNeededError
+from piazza_sdk.adapters.http import RPC, _AuthRetryNeededError, _check_embedded_error
+from piazza_sdk.config import PiazzaConfig
 from piazza_sdk.exceptions import (
     AuthenticationError,
     NetworkError,
@@ -52,6 +55,10 @@ def _make_session(client: httpx.AsyncClient | None = None) -> MagicMock:
     """Wrap an httpx client mock in an adapter mock with a `.client` property."""
     adapter = MagicMock()
     adapter.client = client or _mock_client()
+    adapter.config.throttle_enabled = False
+    adapter.config.throttle_min_delay = 0.0
+    adapter.config.throttle_max_delay = 0.0
+    adapter.config.throttle_idle_timeout = 30.0
     return adapter
 
 
@@ -705,3 +712,162 @@ async def test_user_status():
     rpc = _make_rpc(_make_session(_mock_client(200, {"result": {"status": "ok"}})))
     res = await rpc.user_status()
     assert res == {"status": "ok"}
+
+
+def test_throttle_off_by_default():
+    rpc = _make_rpc(_make_session(_mock_client(200, {})))
+    assert rpc._throttle_enabled is False
+    assert rpc._throttle_min_delay == 0.0
+    assert rpc._throttle_max_delay == 0.0
+    assert rpc._throttle_idle_timeout == 30.0
+
+
+def test_not_found_from_body_mock():
+    # Test dictionary with "error": "not found"
+    with pytest.raises(NotFoundError) as exc_info:
+        _check_embedded_error(
+            {"result": None, "error": "The post you are looking for cannot be found"}
+        )
+    assert exc_info.value.response_body == {
+        "result": None,
+        "error": "The post you are looking for cannot be found",
+    }
+
+    # Test stringified result with "not found"
+    with pytest.raises(NotFoundError) as exc_info:
+        _check_embedded_error({"status": "failed, the post Not Found in db"})
+    assert "not found" in str(exc_info.value).lower()
+
+    # Valid dict without error should pass seamlessly
+    _check_embedded_error({"result": "success"})
+
+    # Non-dict should be ignored
+    _check_embedded_error(["list", "result"])
+
+
+# ---------------------------------------------------------------------------
+# Throttle behavior
+# ---------------------------------------------------------------------------
+
+
+class TestThrottleBehavior:
+    async def test_throttle_disabled_skips_delay(self):
+        """When throttle_enabled=False, _throttle should return immediately."""
+        session = _make_session(_mock_client(200, {}))
+        session.config.throttle_enabled = False
+        rpc = _make_rpc(session)
+        # Should not raise or sleep
+        await rpc._throttle()
+
+    async def test_throttle_enabled_inserts_delay(self):
+        """When throttle_enabled=True, _throttle should sleep."""
+        session = _make_session(_mock_client(200, {}))
+        session.config.throttle_enabled = True
+        session.config.throttle_min_delay = 0.01
+        session.config.throttle_max_delay = 0.02
+        rpc = _make_rpc(session)
+        # Set recent timestamp so elapsed < idle_timeout
+        rpc._last_request_time = time.monotonic()
+        with patch("piazza_sdk.adapters.http.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            await rpc._throttle()
+            mock_sleep.assert_called_once()
+            delay = mock_sleep.call_args[0][0]
+            assert 0.0 <= delay <= 0.02
+
+    async def test_throttle_idle_reset_skips_delay(self):
+        """When elapsed > idle_timeout, throttle should skip the delay."""
+        session = _make_session(_mock_client(200, {}))
+        session.config.throttle_enabled = True
+        session.config.throttle_min_delay = 1.0
+        session.config.throttle_max_delay = 2.0
+        session.config.throttle_idle_timeout = 0.01
+        rpc = _make_rpc(session)
+        # Simulate a previous request long ago
+        rpc._last_request_time = time.monotonic() - 1.0
+        with patch("piazza_sdk.adapters.http.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            await rpc._throttle()
+            mock_sleep.assert_not_called()
+
+    async def test_throttle_second_rapid_request_sleeps(self):
+        """Second rapid request within min_delay window should sleep."""
+        session = _make_session(_mock_client(200, {}))
+        session.config.throttle_enabled = True
+        session.config.throttle_min_delay = 0.5
+        session.config.throttle_max_delay = 1.0
+        session.config.throttle_idle_timeout = 30.0
+        rpc = _make_rpc(session)
+        # First request sets the timestamp
+        rpc._last_request_time = time.monotonic()
+        with patch("piazza_sdk.adapters.http.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            await rpc._throttle()
+            mock_sleep.assert_called_once()
+            delay = mock_sleep.call_args[0][0]
+            assert delay > 0
+
+
+# ---------------------------------------------------------------------------
+# Embedded error pattern coverage
+# ---------------------------------------------------------------------------
+
+
+class TestEmbeddedErrorPatterns:
+    def test_method_not_found_in_error_field(self):
+        """'Method not found' in error field should raise NotFoundError."""
+        with pytest.raises(NotFoundError, match="Method not found"):
+            _check_embedded_error({"error": "Method not found: get_user_preferences"})
+
+    def test_does_not_exist_in_error_field(self):
+        """'does not exist' in error field should raise NotFoundError."""
+        with pytest.raises(NotFoundError, match="does not exist"):
+            _check_embedded_error({"error": "Post 999 does not exist"})
+
+    def test_cannot_be_found_in_error_field(self):
+        """'cannot be found' in error field should raise NotFoundError."""
+        with pytest.raises(NotFoundError, match="cannot be found"):
+            _check_embedded_error({"error": "The resource cannot be found"})
+
+    def test_not_found_in_stringified_result(self):
+        """'not found' (lowercase) in stringified dict should raise NotFoundError."""
+        with pytest.raises(NotFoundError):
+            _check_embedded_error({"status": "method not found in registry"})
+
+    def test_does_not_exist_in_stringified_result(self):
+        """'does not exist' in stringified dict should raise NotFoundError."""
+        with pytest.raises(NotFoundError):
+            _check_embedded_error({"detail": "User does not exist"})
+
+    def test_clean_dict_passes(self):
+        """A dict without error patterns should not raise."""
+        _check_embedded_error({"result": "ok", "aid": "abc"})
+
+    def test_non_dict_passes(self):
+        """Non-dict values should be ignored."""
+        _check_embedded_error("just a string")
+        _check_embedded_error(42)
+        _check_embedded_error(None)
+
+
+# ---------------------------------------------------------------------------
+# Config validator
+# ---------------------------------------------------------------------------
+
+
+class TestConfigValidator:
+    def test_min_gt_max_raises(self):
+        """throttle_min_delay > throttle_max_delay should raise ValueError."""
+        with pytest.raises(ValidationError, match="throttle_min_delay.*must be <="):
+            PiazzaConfig(course_id="test", throttle_min_delay=5.0, throttle_max_delay=1.0)
+
+    def test_min_eq_max_ok(self):
+        """throttle_min_delay == throttle_max_delay should be accepted."""
+        cfg = PiazzaConfig(course_id="test", throttle_min_delay=2.0, throttle_max_delay=2.0)
+        assert cfg.throttle_min_delay == 2.0
+        assert cfg.throttle_max_delay == 2.0
+
+    def test_defaults_are_valid(self):
+        """Default throttle values should be valid."""
+        cfg = PiazzaConfig(course_id="test")
+        assert cfg.throttle_enabled is False
+        assert cfg.throttle_min_delay == 1.0
+        assert cfg.throttle_max_delay == 3.0
+        assert cfg.throttle_idle_timeout == 30.0

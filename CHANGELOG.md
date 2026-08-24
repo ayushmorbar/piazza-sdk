@@ -3,9 +3,22 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [CalVer](https://calver.org/) (`YYYY.MM.PATCH`).
+and this project adheres to [CalVer](https://calver.org/) (`YYYY.MM.DD`).
 
 ## [Unreleased]
+
+## [2026.08.24] - 2026-08-24
+
+### Added
+
+- Opt-in stealth mode request throttling to mimic human pacing:
+  - `PiazzaConfig` fields: `throttle_enabled` (default `False`), `throttle_min_delay` (default `1.0s`), `throttle_max_delay` (default `3.0s`), and `throttle_idle_timeout` (default `30.0s`).
+  - Model validator enforcing `throttle_min_delay <= throttle_max_delay`.
+  - `RPC._throttle()` with uniform-random delays within the configured bounds, idle reset on browsing gaps (`>= throttle_idle_timeout`), and zero-overhead fast-path when disabled.
+- Proactive embedded error detection:
+  - `RPC._check_embedded_error()` detects HTTP 200 responses containing embedded error strings (`"not found"`, `"does not exist"`, `"cannot be found"`) in dictionary and stringified payloads, raising typed `NotFoundError`.
+  - Normalized error handling in `RPC.call()` across raw error envelopes and nested payload results.
+- Comprehensive test coverage for throttling state transitions, idle reset behavior, config validation, and embedded error patterns in unit and live suites.
 
 ### Fixed
 

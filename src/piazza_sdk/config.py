@@ -11,6 +11,7 @@ from pathlib import Path  # noqa: TC003 - needed at runtime for Pydantic model r
 from typing import Any
 from urllib.parse import urlparse
 
+import pydantic
 from cryptography.fernet import Fernet
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,6 +45,23 @@ class PiazzaConfig(BaseSettings):
     timeout: float = Field(default=30.0, description="HTTP request timeout in seconds")
     retries: int = Field(default=3, description="Number of retry attempts for transient failures")
     retry_delay: float = Field(default=1.0, description="Base delay between retries in seconds")
+    throttle_enabled: bool = Field(
+        default=False,
+        description="Enable request throttling to mimic human pacing. "
+        "When False, no delays are inserted between requests.",
+    )
+    throttle_min_delay: float = Field(
+        default=1.0, ge=0.0, description="Minimum delay between rapid requests (seconds)."
+    )
+    throttle_max_delay: float = Field(
+        default=3.0, ge=0.0, description="Maximum delay between rapid requests (seconds)."
+    )
+    throttle_idle_timeout: float = Field(
+        default=30.0,
+        gt=0.0,
+        description="If no request is made for this duration (seconds), the next request "
+        "skips throttling entirely (user was idle / browsing casually).",
+    )
     cookie_path: Path | None = Field(
         default=None, description="Path for persisting cookies to disk"
     )
@@ -70,6 +88,16 @@ class PiazzaConfig(BaseSettings):
                 "print(Fernet.generate_key().decode())"
             ) from e
         return v
+
+    @pydantic.model_validator(mode="after")
+    def _validate_throttle_delays(self) -> PiazzaConfig:
+        """Validate throttle delay ordering — min must not exceed max."""
+        if self.throttle_min_delay > self.throttle_max_delay:
+            raise ValueError(
+                f"throttle_min_delay ({self.throttle_min_delay}) must be <= "
+                f"throttle_max_delay ({self.throttle_max_delay})"
+            )
+        return self
 
     def model_post_init(self, __context: Any) -> None:
         """Validate and enforce HTTPS on base_url."""

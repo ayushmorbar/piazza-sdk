@@ -10,9 +10,11 @@ Run explicitly with:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -379,3 +381,107 @@ async def test_cookie_persistence_and_encryption_live():
             alive = await session2.is_session_alive()
             assert alive, "Restored session should be live and valid"
             logger.info("✓ Restored encrypted session successfully authenticated on live API")
+
+
+@live
+@pytest.mark.asyncio
+async def test_live_throttle_activates():
+    """Live test: throttle delays requests when enabled."""
+    config = PiazzaConfig(course_id=COURSE_ID, throttle_min_delay=1.0, throttle_max_delay=1.5)
+    async with SessionStateManager(config) as session:
+        await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        network = Network(
+            RPC(session=session, base_url=config.base_url, network_id=COURSE_ID), COURSE_ID
+        )
+
+        start = time.monotonic()
+        await network.get_feed(limit=1)
+        await network.get_feed(limit=1)
+        elapsed = time.monotonic() - start
+        assert elapsed >= 1.0, (
+            f"Throttle did not delay requests sufficiently (elapsed {elapsed:.2f}s < 1.0s)"
+        )
+        logger.info("✓ Throttle correctly delayed requests (elapsed: %.2fs)", elapsed)
+
+
+@live
+@pytest.mark.asyncio
+async def test_live_throttle_idle_reset():
+    """Live test: idle timeout resets throttle so next request is fast."""
+    config = PiazzaConfig(course_id=COURSE_ID, throttle_min_delay=1.0, throttle_max_delay=1.5)
+    async with SessionStateManager(config) as session:
+        await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        network = Network(
+            RPC(session=session, base_url=config.base_url, network_id=COURSE_ID), COURSE_ID
+        )
+
+        # Prime the throttle with a request
+        await network.get_feed(limit=1)
+        # Sleep longer than max_delay to trigger idle reset
+        await asyncio.sleep(1.6)
+        start = time.monotonic()
+        await network.get_feed(limit=1)
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0, (
+            f"Idle reset failed, request was throttled (elapsed {elapsed:.2f}s >= 1.0s)"
+        )
+        logger.info("✓ Throttle idle reset skipped delay correctly (elapsed: %.2fs)", elapsed)
+
+
+@live
+@pytest.mark.asyncio
+async def test_live_throttle_multiple_rapid_requests():
+    """Live test:3 rapid throttled requests are properly paced."""
+    config = PiazzaConfig(course_id=COURSE_ID, throttle_min_delay=1.0, throttle_max_delay=1.5)
+    async with SessionStateManager(config) as session:
+        await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        network = Network(
+            RPC(session=session, base_url=config.base_url, network_id=COURSE_ID), COURSE_ID
+        )
+
+        # 3 rapid calls should take at least min_delay * (N-1) = 2.0s
+        start = time.monotonic()
+        for _ in range(3):
+            await network.search("test")
+        elapsed = time.monotonic() - start
+        assert elapsed >= 2.0, (
+            f"Multiple rapid throttled requests failed delay check (elapsed {elapsed:.2f}s)"
+        )
+        logger.info("✓ 3 rapid throttled requests correctly paced (elapsed: %.2fs)", elapsed)
+
+
+@live
+@pytest.mark.asyncio
+async def test_live_not_found_detection():
+    """Live test: embedded error detection raises NotFoundError for non-existent post."""
+    config = PiazzaConfig(course_id=COURSE_ID)
+    async with SessionStateManager(config) as session:
+        await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        network = Network(
+            RPC(session=session, base_url=config.base_url, network_id=COURSE_ID), COURSE_ID
+        )
+
+        with pytest.raises(NotFoundError):
+            await network.get_post("9999999999")
+        logger.info("✓ Not found detection properly raised NotFoundError on live API")
+
+
+@live
+@requires_instructor_creds
+@pytest.mark.asyncio
+async def test_live_no_throttle_performance():
+    """Live test verifying performance without throttle is fast."""
+
+    config = PiazzaConfig(course_id=COURSE_ID, throttle_min_delay=0.0, throttle_max_delay=0.0)
+    async with SessionStateManager(config) as session:
+        await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        network = Network(
+            RPC(session=session, base_url=config.base_url, network_id=COURSE_ID), COURSE_ID
+        )
+
+        start = time.monotonic()
+        for i in range(3):
+            await network.get_feed(limit=1)
+        elapsed = time.monotonic() - start
+        assert elapsed < 2.0, f"Unthrottled requests too slow (elapsed {elapsed:.2f}s >= 2.0s)"
+        logger.info("✓ Unthrottled 3 rapid requests were fast (elapsed: %.2fs)", elapsed)

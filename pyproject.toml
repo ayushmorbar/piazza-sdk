@@ -60,6 +60,14 @@ Repository = "https://github.com/ayushmorbar/piazza-sdk"
 Issues = "https://github.com/ayushmorbar/piazza-sdk/issues"
 Changelog = "https://github.com/ayushmorbar/piazza-sdk/blob/main/CHANGELOG.md"
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/piazza_sdk/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/piazza_sdk"]
 

@@ -7,6 +7,10 @@ repo_name: ayushmorbar/piazza-sdk
 
 theme:
   name: material
+  custom_dir: docs/_templates
+  font:
+    text: Inter
+    code: Fira Code
   palette:
     - scheme: default
       primary: indigo
@@ -55,3 +59,6 @@ plugins:
             members_order: source
             docstring_style: google
             merge_init_into_class: true
+
+extra_css:
+  - _static/custom.css

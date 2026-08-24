@@ -89,6 +89,12 @@ class Piazza:
         Returns:
             List of class dictionaries; each carries a ``nid`` key taken
             from its mapping key when not already present.
+
+        Example:
+            ```python
+            # Example for get_user_classes
+            res = await get_user_classes()
+            ```
         """
         if self._session.needs_refresh:
             await self._session.refresh()
@@ -125,6 +131,12 @@ class Piazza:
         Returns:
             User profile dictionary with name, email, school, roles,
             skills, tags, and enrolled classes.
+
+        Example:
+            ```python
+            # Example for get_user_profile
+            res = await get_user_profile()
+            ```
         """
         if self._session.needs_refresh:
             await self._session.refresh()
@@ -143,6 +155,12 @@ class Piazza:
 
         Returns:
             Raw user status dictionary.
+
+        Example:
+            ```python
+            # Example for get_user_status
+            res = await get_user_status()
+            ```
         """
         if self._session.needs_refresh:
             await self._session.refresh()
@@ -158,6 +176,12 @@ class Piazza:
 
         Returns:
             Dictionary containing event counts and notification metadata.
+
+        Example:
+            ```python
+            # Example for get_my_events_info
+            res = await get_my_events_info()
+            ```
         """
         if self._session.needs_refresh:
             await self._session.refresh()
@@ -173,6 +197,12 @@ class Piazza:
 
         Returns:
             Integer count of unread messages.
+
+        Example:
+            ```python
+            # Example for get_unread_message_count
+            res = await get_unread_message_count()
+            ```
         """
         if self._session.needs_refresh:
             await self._session.refresh()
@@ -192,6 +222,12 @@ class Piazza:
 
         Returns:
             ``True`` if the event was accepted by the server.
+
+        Example:
+            ```python
+            # Example for page_event
+            res = await page_event(type='...')
+            ```
         """
         if self._session.needs_refresh:
             await self._session.refresh()
@@ -212,6 +248,12 @@ class Piazza:
         Returns:
             Dictionary containing the sanitized HTML under the
             ``sanitized`` key (and possibly other metadata).
+
+        Example:
+            ```python
+            # Example for sanitize_html
+            res = await sanitize_html()
+            ```
         """
         if self._session.needs_refresh:
             await self._session.refresh()

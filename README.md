@@ -27,39 +27,39 @@ pip install piazza-sdk
 
 ## Quick Start
 
+We have provided a set of comprehensive, runnable tutorials in the `docs/_tutorials/` directory. These scripts are fully documented and show exactly how to use the SDK.
+
+- [01: Getting Started](docs/_tutorials/01_getting_started.py) — Authentication and basic profiles
+- [02: Reading the Feed](docs/_tutorials/02_reading_the_feed.py) — Fetching posts and using filters
+- [03: Creating & Answering](docs/_tutorials/03_creating_and_answering_posts.py) — Interacting with posts
+- [04: Advanced User Stats](docs/_tutorials/04_advanced_user_stats.py) — Course analytics and online users
+
+Here is a quick snippet to fetch your class feed:
+
 ```python
+import asyncio
 from piazza_sdk import Piazza, SessionConfig, SessionStateManager
 
 async def main():
-    config = SessionConfig(
-        course_id="your_course_id",
-        user_agent="my-app/1.0",
-    )
-
+    config = SessionConfig(user_agent="my-app/1.0")
     async with SessionStateManager(config) as session:
         await session.login(email="your@email.com", password="your_password")
+        
         piazza = Piazza(session)
-
         classes = await piazza.get_user_classes()
         network = piazza.network(classes[0]["nid"])
 
-        feed = await network.get_feed(limit=10)
+        feed = await network.get_feed(limit=5)
         for item in feed.feed:
             print(f"{item.subject} ({item.type})")
 
-        post = await network.get_post(feed.feed[0].id)
-        print(f"Author: {post.user_name}")
-
-        await network.create_followup(
-            post=post,
-            content="Great question!",
-            anonymous=False,
-        )
-
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
 ```
+
+## Acknowledgements
+
+Piazza SDK is deeply grateful to the open-source community. Special thanks to [HfPiazza](https://github.com/hfaran/piazza-api) for earlier inspirations in navigating the complex Piazza undocumented API layer.
 
 ## API
 

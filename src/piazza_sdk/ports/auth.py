@@ -49,6 +49,12 @@ class TokenStorageProtocol(Protocol):
 
         Returns:
             True if data was loaded, False if nothing was stored.
+
+        Example:
+            ```python
+            # Example for load
+            res = await load(path='...')
+            ```
         """
         ...
 
@@ -57,6 +63,12 @@ class TokenStorageProtocol(Protocol):
 
         Args:
             path: File path to write to store.
+
+        Example:
+            ```python
+            # Example for save
+            res = await save(path='...')
+            ```
         """
         ...
 
@@ -80,11 +92,23 @@ class AuthProtocol(Protocol):
         Args:
             email: User email address.
             password: User password.
+
+        Example:
+            ```python
+            # Example for login
+            res = await login(email='...', password='...')
+            ```
         """
         ...
 
     async def logout(self) -> None:
-        """Terminate the current session and release resources."""
+        """Terminate the current session and release resources.
+        Example:
+            ```python
+            # Example for logout
+            res = await logout()
+            ```
+        """
         ...
 
     async def refresh(self, email: str | None = None, password: str | None = None) -> None:
@@ -93,6 +117,12 @@ class AuthProtocol(Protocol):
         Args:
             email: Optional credential override for this refresh.
             password: Optional credential override for this refresh.
+
+        Example:
+            ```python
+            # Example for refresh
+            res = await refresh(email='...', password='...')
+            ```
         """
         ...
 

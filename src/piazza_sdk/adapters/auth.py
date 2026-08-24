@@ -137,6 +137,12 @@ class CookieJar(BaseModel):
 
         Raises:
             PiazzaSDKError: If the file cannot be written.
+
+        Example:
+            ```python
+            # Example for save
+            res = await save(path='...')
+            ```
         """
         payload = json.dumps(self.model_dump(), indent=2)
 
@@ -174,6 +180,12 @@ class CookieJar(BaseModel):
 
         Raises:
             PiazzaSDKError: If the file exists but cannot be read.
+
+        Example:
+            ```python
+            # Example for load
+            res = await load(path='...')
+            ```
         """
 
         def _read_sync() -> str | None:

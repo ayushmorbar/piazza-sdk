@@ -30,6 +30,12 @@ async def get_statistics(rpc: RPC, *, session: SessionStateManager | None = None
     Raises:
         StatisticsError: If statistics retrieval or parsing fails.
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for get_statistics
+            res = await get_statistics()
+            ```
     """
     try:
         raw = await rpc.get_stats()

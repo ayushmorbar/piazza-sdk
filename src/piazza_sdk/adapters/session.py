@@ -137,6 +137,12 @@ class SessionStateManager:
         Raises:
             AuthenticationError: If login fails or CSRF token is invalid.
             SessionClosedError: If session is already closed.
+
+        Example:
+            ```python
+            # Example for login
+            res = await login(email='...', password='...')
+            ```
         """
         if self._state == SessionState.CLOSED:
             raise SessionClosedError("Cannot login — session is closed.")
@@ -237,6 +243,12 @@ class SessionStateManager:
 
         Raises:
             AuthenticationError: If refresh login fails or credentials are unavailable.
+
+        Example:
+            ```python
+            # Example for refresh
+            res = await refresh(email='...', password='...')
+            ```
         """
         email = email or self._email
         password = password or self._password
@@ -263,6 +275,12 @@ class SessionStateManager:
         Re-authenticates using stored credentials and re-applies cookies
         to the active httpx client so the retried request carries the new
         session. This is the public seam RPC instances program against.
+
+        Example:
+            ```python
+            # Example for handle_auth_error
+            res = await handle_auth_error()
+            ```
         """
         await self.refresh()
         # Re-apply refreshed cookies to the live httpx client so the
@@ -280,6 +298,12 @@ class SessionStateManager:
 
         Returns:
             True if cookies were restored, False otherwise.
+
+        Example:
+            ```python
+            # Example for restore_cookies
+            res = await restore_cookies()
+            ```
         """
         if self._cookie_path is None:
             return False
@@ -298,6 +322,12 @@ class SessionStateManager:
         """Terminate the current session and release all resources.
 
         Alias for :meth:`close` that satisfies the ``SessionManagerProtocol``.
+
+        Example:
+            ```python
+            # Example for logout
+            res = await logout()
+            ```
         """
         await self.close()
 
@@ -322,6 +352,12 @@ class SessionStateManager:
 
         Returns:
             ``True`` if the session is alive, ``False`` otherwise.
+
+        Example:
+            ```python
+            # Example for is_session_alive
+            res = await is_session_alive()
+            ```
         """
         if self._state != SessionState.AUTHENTICATED or self._client is None:
             return False
@@ -380,6 +416,12 @@ class SessionStateManager:
         """Close the session and release resources.
 
         Transitions: any → CLOSED
+
+        Example:
+            ```python
+            # Example for close
+            res = await close()
+            ```
         """
         self.stop_heartbeat()
         if self._client is not None:

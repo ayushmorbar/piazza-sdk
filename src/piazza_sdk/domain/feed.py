@@ -72,6 +72,12 @@ async def get_feed(
     Raises:
         FeedError: If feed retrieval fails.
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for get_feed
+            res = await get_feed()
+            ```
     """
     try:
         raw = await rpc.get_my_feed(limit=limit, offset=offset, **kwargs)
@@ -106,6 +112,12 @@ async def get_similar_posts(
     Raises:
         NotFoundError: If the specified post does not exist.
         PiazzaSDKError: On unexpected errors.
+
+        Example:
+            ```python
+            # Example for get_similar_posts
+            res = await get_similar_posts()
+            ```
     """
     try:
         raw: dict[str, Any] = await rpc.content_get_similar(post_id)

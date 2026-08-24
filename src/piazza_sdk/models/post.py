@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime  # noqa: TC003
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from piazza_sdk.models.enums import AnonymityLevel, ChangeType, PostStatus, PostType, Visibility
 
@@ -439,6 +439,20 @@ class Post(BaseModel):
     clobber: str | None = Field(default=None, description="Clobber state")
     user_endorse: dict[str, Any] | None = Field(default=None, description="User endorsement data")
     tag: str | None = Field(default=None, description="Post tag")
+
+    @model_validator(mode="after")
+    def _auto_number_revisions(self) -> Post:
+        """Auto-increment revision numbers from list index.
+
+        The Piazza wire format does not include a ``revision`` field in
+        ``history`` entries.  When all revisions carry the default value
+        (0), assign sequential 1-based numbers matching the chronological
+        order returned by the API.
+        """
+        if self.revisions and all(r.revision == 0 for r in self.revisions):
+            for idx, rev in enumerate(self.revisions, start=1):
+                rev.revision = idx
+        return self
 
     # Backward compat: expose first folder as scalar property
     @property

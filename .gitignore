@@ -123,4 +123,6 @@ pyrightconfig.json
 # ruff
 .ruff_cache/
 
-
+# miscellaneous
+temp_src
+scratch/

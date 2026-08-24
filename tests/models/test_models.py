@@ -23,7 +23,13 @@ from piazza_sdk.models.feed import (
     UnreadFilter,
 )
 from piazza_sdk.models.network import HallOfFameItem, NetworkInfo
-from piazza_sdk.models.post import Post, PostCreatedResponse, PostRevision, PublishingOptions
+from piazza_sdk.models.post import (
+    ChangeLogEntry,
+    Post,
+    PostCreatedResponse,
+    PostRevision,
+    PublishingOptions,
+)
 from piazza_sdk.models.user import User, UserPreferences
 
 # ==============================================================================
@@ -164,6 +170,128 @@ class TestPostModel:
         assert opts.bypass_email is True
         assert opts.silent_update is True
         assert opts.anonymity == AnonymityLevel.STUD
+
+    def test_wire_key_change_log_via_alias(self):
+        """Post.change_log is aliased as ``log`` — wire data uses ``log``."""
+        post = Post(id="p1", title="T", raw={}, log=[{"id": "cl1"}])
+        assert len(post.change_log) == 1
+        assert post.change_log[0].id == "cl1"
+
+    def test_wire_key_endorsements_direct(self):
+        """Post.endorsements maps directly from ``tag_good`` via network layer."""
+        post = Post(id="p1", title="T", raw={}, endorsements=[{"role": "student", "tag": "good"}])
+        assert len(post.endorsements) == 1
+        assert post.endorsements[0].tag == "good"
+
+    def test_wire_key_revisions_direct(self):
+        """Post.revisions maps from ``history`` via network layer."""
+        post = Post(id="p1", title="T", raw={}, revisions=[{"subject": "Q1", "content": "body1"}])
+        assert len(post.revisions) == 1
+        assert post.revisions[0].subject == "Q1"
+
+    def test_revision_auto_numbering(self):
+        """PostRevision.revision auto-increments from list index when all are 0."""
+        post = Post(
+            id="p1",
+            title="T",
+            raw={},
+            revisions=[
+                {"subject": "v1", "content": "c1"},
+                {"subject": "v2", "content": "c2"},
+                {"subject": "v3", "content": "c3"},
+            ],
+        )
+        assert post.revisions[0].revision == 1
+        assert post.revisions[1].revision == 2
+        assert post.revisions[2].revision == 3
+
+    def test_revision_auto_numbering_skipped_when_explicit(self):
+        """Auto-numbering is skipped if any revision already has an explicit number."""
+        post = Post(
+            id="p1",
+            title="T",
+            raw={},
+            revisions=[
+                {"subject": "v1", "content": "c1", "revision": 5},
+                {"subject": "v2", "content": "c2"},
+            ],
+        )
+        assert post.revisions[0].revision == 5
+        assert post.revisions[1].revision == 0
+
+    def test_change_log_entry_wire_aliases(self):
+        """ChangeLogEntry accepts wire keys ``n`` (type) and ``t`` (when)."""
+        entry = ChangeLogEntry(n="update", t="2025-08-20T12:00:00Z", id="cl_1")
+        assert entry.type == ChangeType.UPDATE
+        assert entry.when == "2025-08-20T12:00:00Z"
+
+    def test_change_type_includes_update(self):
+        """ChangeType enum includes UPDATE value for wire data ``\"update\"``."""
+        assert ChangeType.UPDATE.value == "update"
+
+    def test_full_wire_format_post_construction(self):
+        """End-to-end: construct Post from full HAR-like wire payload.
+
+        ``tag_good`` → ``endorsements`` and ``history`` → ``revisions``
+        are mapped by network.py.  ``log`` is an alias on the Post model.
+        ``change_log`` is the Python attribute name; ``log`` is the alias.
+        """
+        wire = {
+            "id": "l2345abc",
+            "nr": 42,
+            "type": "question",
+            "subject": "How does X work?",
+            "uid": "u_student1",
+            "status": "active",
+            "log": [
+                {"id": "cl1", "n": "create", "u": "u_student1"},
+                {"id": "cl2", "n": "update", "u": "u_student1"},
+            ],
+            "endorsements": [{"role": "instructor", "tag": "good", "endorser": {"id": "u_prof1"}}],
+            "revisions": [
+                {"subject": "How does X work?", "content": "Initial"},
+                {"subject": "How does X work? (edited)", "content": "Updated body"},
+            ],
+            "children": [{"id": "c1", "type": "i_answer", "subject": "Here's how"}],
+            "folders": ["hw3"],
+            "views": 120,
+        }
+        post = Post(**wire)
+        assert post.id == "l2345abc"
+        assert post.nr == 42
+        assert len(post.change_log) == 2
+        assert post.change_log[0].type == ChangeType.CREATE
+        assert post.change_log[1].type == ChangeType.UPDATE
+        assert len(post.endorsements) == 1
+        assert post.endorsements[0].tag == "good"
+        assert len(post.revisions) == 2
+        assert post.revisions[0].revision == 1
+        assert post.revisions[1].revision == 2
+        assert len(post.children) == 1
+        assert post.folders == ["hw3"]
+        assert post.views == 120
+
+    def test_network_layer_wire_key_mapping(self):
+        """Simulate network.py's Post construction with HAR wire keys."""
+        # Simulate what network.py line 240-245 does:
+        raw = {
+            "id": "net_post_1",
+            "change_log": [{"id": "cl1", "n": "create", "u": "u1"}],
+            "tag_good": [{"role": "student", "tag": "good"}],
+            "history": [{"subject": "Q", "content": "body"}],
+        }
+        post = Post(
+            id=raw.get("id", ""),
+            log=raw.get("change_log", []),
+            endorsements=raw.get("tag_good", []),
+            revisions=raw.get("history", []),
+        )
+        assert len(post.change_log) == 1
+        assert post.change_log[0].id == "cl1"
+        assert len(post.endorsements) == 1
+        assert post.endorsements[0].tag == "good"
+        assert len(post.revisions) == 1
+        assert post.revisions[0].revision == 1
 
 
 # ==============================================================================

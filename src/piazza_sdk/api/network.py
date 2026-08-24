@@ -237,12 +237,12 @@ class Network:
                 students=raw.get("students", []),
                 followups=raw.get("followups", []),
                 answers=raw.get("answers", []),
-                log=raw.get("log", []),
-                endorsements=raw.get("endorsements", []),
+                log=raw.get("change_log", []),
+                endorsements=raw.get("tag_good", []),
                 children=raw.get("children", []),
                 user_name=raw.get("user_name", raw.get("author", "")),
                 visibility=raw.get("visibility", "public"),
-                revisions=raw.get("revisions", []),
+                revisions=raw.get("history", []),
             )
         except (NotFoundError, PiazzaSDKError):
             raise

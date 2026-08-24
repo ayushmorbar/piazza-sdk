@@ -25,6 +25,7 @@ class ChangeType(StrEnum):
     FEEDBACK = "feedback"  # Feedback was given
     INSTRUCTOR_ANSWER = "i_answer"  # Instructor posted an answer
     STUDENT_ANSWER = "s_answer"  # Student posted an answer
+    UPDATE = "update"  # Post was updated (locked, status changed, etc.)
 
 
 class Visibility(StrEnum):
@@ -34,6 +35,7 @@ class Visibility(StrEnum):
     PRIVATE = "private"  # Visible only to instructors
     GROUP = "group"  # Visible to a specific group
     INSTRUCTORS_ONLY = "instructors_only"  # Visible to instructors only
+    ALL = "all"  # Visible to everyone (observed on change_log entries)
 
 
 class AnonymityLevel(StrEnum):

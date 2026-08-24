@@ -106,7 +106,10 @@ async def test_instructor_live_all_queries():  # noqa: PLR0915
         post = await network.get_post(first_item.id)
         assert post.id == first_item.id
         assert isinstance(post.change_log, list)
+        assert len(post.change_log) > 0, "change_log should be populated from wire 'change_log' key"
         assert isinstance(post.revisions, list)
+        assert len(post.revisions) > 0, "revisions should be populated from wire 'history' key"
+        assert post.revisions[0].revision >= 1, "revision numbers should be auto-numbered from 1"
         logger.info(
             "✓ Post retrieved: %s (type=%s, tags=%s, change_log=%d, revisions=%d)",
             post.id,

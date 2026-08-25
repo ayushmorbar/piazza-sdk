@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class User(BaseModel):
@@ -32,7 +32,9 @@ class User(BaseModel):
 
     model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
-    id: str = Field(description="Unique user identifier")
+    id: str = Field(
+        validation_alias=AliasChoices("id", "user_id"), description="Unique user identifier"
+    )
     name: str = Field(default="", description="User's display name")
     email: str = Field(default="", description="User's email address")
     role: list[str] = Field(default_factory=list, description="User's roles")
@@ -55,6 +57,13 @@ class User(BaseModel):
     profile_settings: dict[str, Any] | None = Field(
         default=None, description="Profile display settings"
     )
+    academics: dict[str, Any] | None = Field(
+        default=None, description="User's academic information"
+    )
+    last_update: str | None = Field(default=None, description="Timestamp of last profile update")
+    school: str | None = Field(default=None, description="Primary school name")
+    school_id: str | None = Field(default=None, description="Primary school identifier")
+    tags: list[str] = Field(default_factory=list, description="User profile tags")
 
     def get_classes_by_role(self, role: str) -> list[str]:
         """Return network IDs where the user has the specified role.

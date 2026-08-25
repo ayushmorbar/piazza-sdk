@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime  # noqa: TC003
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from piazza_sdk.models.enums import AnonymityLevel, ChangeType, PostStatus, PostType, Visibility
 
@@ -73,6 +73,9 @@ class ChangeLogEntry(BaseModel):
         default=AnonymityLevel.NO, description="Anonymity level of the change author"
     )
     uid: str = Field(default="", alias="u", description="User ID of the person who made the change")
+    uid_a: str | None = Field(
+        default=None, description="Anonymous user ID (e.g. 'a_0'), if anonymous"
+    )
     data: str | None = Field(default=None, description="Free-form data associated with the change")
     to: str | None = Field(default=None, description="Target value after the change, if applicable")
     v: Visibility = Field(default=Visibility.PUBLIC, description="Visibility of the change record")
@@ -131,6 +134,12 @@ class FollowUp(BaseModel):
 
     id: str = Field(default="", description="Unique identifier for this follow-up")
     uid: str = Field(default="", alias="u", description="Author's user ID")
+    uid_a: str | None = Field(
+        default=None, description="Anonymous user ID (e.g. 'a_0'), if anonymous"
+    )
+    d_bucket: str | None = Field(
+        default=None, alias="d-bucket", description="Date bucket (e.g., 'Yesterday')"
+    )
     subject: str = Field(default="", description="Follow-up subject line")
     content: str = Field(default="", description="Follow-up body content (HTML)")
     created: datetime | None = Field(
@@ -171,6 +180,12 @@ class Child(BaseModel):
     subject: str = Field(default="", description="Child subject line")
     content: str = Field(default="", description="Child body content (HTML)")
     uid: str = Field(default="", alias="u", description="Author's user ID")
+    uid_a: str | None = Field(
+        default=None, description="Anonymous user ID (e.g. 'a_0'), if anonymous"
+    )
+    d_bucket: str | None = Field(
+        default=None, alias="d-bucket", description="Date bucket (e.g., 'Yesterday')"
+    )
     created: datetime | None = Field(
         default=None, description="Timestamp when the child was posted"
     )
@@ -184,6 +199,10 @@ class Child(BaseModel):
     followed: bool = Field(
         default=False, description="Whether the current user is following this element"
     )
+    revisions: list[PostRevision] = Field(
+        default_factory=list, alias="history", description="Revision history"
+    )
+    history_size: int = Field(default=0, description="Size of revision history")
     role: list[str] = Field(default_factory=list, description="Author role(s)")
     instructor: bool | None = Field(default=None, description="Whether authored by an instructor")
     endorsers: list[dict[str, Any]] | None = Field(
@@ -200,6 +219,9 @@ class Child(BaseModel):
     )
     tag_endorse_arr: list[str] = Field(
         default_factory=list, description="List of user IDs who endorsed this answer"
+    )
+    children: list[Child] = Field(
+        default_factory=list, description="Nested child elements (e.g. comments on followups)"
     )
 
 
@@ -235,6 +257,10 @@ class Answer(BaseModel):
     endorsements: list[Endorsement] = Field(
         default_factory=list, description="List of endorsement records"
     )
+    revisions: list[PostRevision] = Field(
+        default_factory=list, alias="history", description="Revision history"
+    )
+    history_size: int = Field(default=0, description="Size of revision history")
     is_instructor_answer: bool = Field(
         default=False, description="Whether the author is an instructor"
     )
@@ -395,7 +421,11 @@ class Post(BaseModel):
     default_anonymity: str | bool = Field(
         default=False, description="Whether the post is anonymous by default"
     )
-    is_mine: bool = Field(default=False, description="Whether the current user authored this post")
+    is_mine: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("is_mine", "my_post"),
+        description="Whether the current user authored this post",
+    )
     no_answer: bool = Field(default=False, description="Whether no answer has been accepted")
     followed: bool = Field(
         default=False, description="Whether the current user is following this post"
@@ -434,7 +464,16 @@ class Post(BaseModel):
     visibility: Visibility = Field(
         default=Visibility.PUBLIC, description="Access level (public, instructors, group)"
     )
-    revisions: list[PostRevision] = Field(default_factory=list, description="Full revision history")
+    revisions: list[PostRevision] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("revisions", "history"),
+        description="Full revision history",
+    )
+    anon_icons: bool | None = Field(default=None, description="UI metadata for anonymous icons")
+    anon_map: dict[str, Any] | None = Field(default=None, description="Anonymous alias mapping")
+    followup_summary: dict[str, Any] | None = Field(
+        default=None, description="Summary of follow-ups"
+    )
     enhanced: dict[str, Any] | None = Field(default=None, description="Enhanced content data")
     bumped: bool = Field(default=False, description="Whether the post has been bumped")
     bm_type: str | None = Field(default=None, description="Bookmark type")

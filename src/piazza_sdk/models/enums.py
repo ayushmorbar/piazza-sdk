@@ -57,6 +57,18 @@ class UserRole(StrEnum):
     ADMIN = "admin"  # Network administrator
 
 
+class UserStatKey(StrEnum):
+    """Global user setting keys for the user.set API."""
+
+    FEED_SORT = "feed.sort"
+    FEED_DETAILS = "feed_details"
+    FEED_ICONS = "feed.icons"
+    FEED_FOLLOWUP_COUNT = "feed.followup_count"
+    NO_TIPS = "no_tips"
+    DEFAULT_EDITOR = "default_editor"
+    LIVE_PREVIEW = "live_preview"
+
+
 class FeedSortOrder(StrEnum):
     """Feed sort order as sent to the Piazza API."""
 

@@ -14,6 +14,7 @@ from piazza_sdk.exceptions import PiazzaSDKError
 
 if TYPE_CHECKING:
     from piazza_sdk.auth import SessionStateManager
+    from piazza_sdk.models.enums import UserStatKey
 
 
 class Piazza:
@@ -209,6 +210,41 @@ class Piazza:
         from piazza_sdk.domain.users import get_unread_message_count  # noqa: PLC0415
 
         return await get_unread_message_count(self._get_user_rpc())
+
+    async def set_user_setting(self, stat: UserStatKey | str, val: Any) -> dict[str, Any]:
+        """Set a global user preference or UI state.
+
+        Uses the ``user.set`` RPC method.
+
+        Args:
+            stat: The key of the stat to set (e.g. ``UserStatKey.LIVE_PREVIEW``).
+            val: The value to set it to.
+
+        Returns:
+            The raw response dictionary.
+        """
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.users import set_user_setting  # noqa: PLC0415
+
+        return await set_user_setting(self._get_user_rpc(), stat=stat, val=val)
+
+    async def unset_user_setting(self, stat: UserStatKey | str) -> dict[str, Any]:
+        """Unset/clear a global user preference or UI state.
+
+        Uses the ``user.unset`` RPC method.
+
+        Args:
+            stat: The key of the stat to unset.
+
+        Returns:
+            The raw response dictionary.
+        """
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.users import unset_user_setting  # noqa: PLC0415
+
+        return await unset_user_setting(self._get_user_rpc(), stat=stat)
 
     async def page_event(self, type: str, **kwargs: Any) -> bool:
         """Record a page-view event for analytics.

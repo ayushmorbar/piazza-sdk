@@ -5,7 +5,14 @@ Provides standalone functions for user retrieval and instructor statistics.
 
 from __future__ import annotations
 
-__all__ = ["get_all_users", "get_instructor_stats", "get_online_users", "get_user_status"]
+__all__ = [
+    "get_all_users",
+    "get_instructor_stats",
+    "get_online_users",
+    "get_user_status",
+    "set_user_setting",
+    "unset_user_setting",
+]
 
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +22,7 @@ from piazza_sdk.models.user import User
 if TYPE_CHECKING:
     from piazza_sdk.api.rpc import RPC
     from piazza_sdk.auth import SessionStateManager
+    from piazza_sdk.models.enums import UserStatKey
 
 
 async def get_all_users(rpc: RPC, *, session: SessionStateManager | None = None) -> list[User]:
@@ -176,3 +184,52 @@ async def get_unread_message_count(rpc: RPC, *, session: SessionStateManager | N
         Integer count of unread messages.
     """
     return await rpc.get_unread_message_count()
+
+
+async def set_user_setting(
+    rpc: RPC, *, session: SessionStateManager | None = None, stat: UserStatKey | str, val: Any
+) -> dict[str, Any]:
+    """Set a global user preference or UI state.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager for automatic refresh.
+        stat: The key of the stat to set (e.g., UserStatKey.LIVE_PREVIEW).
+        val: The value to set it to.
+
+    Returns:
+        The raw response dictionary.
+
+    Raises:
+        UserError: If setting fails.
+    """
+    try:
+        return await rpc.user_set(stat=str(stat), val=val)
+    except PiazzaSDKError:
+        raise
+    except Exception as exc:
+        raise UserError(f"Failed to set user setting {stat}: {exc}") from exc
+
+
+async def unset_user_setting(
+    rpc: RPC, *, session: SessionStateManager | None = None, stat: UserStatKey | str
+) -> dict[str, Any]:
+    """Unset/clear a global user preference or UI state.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager for automatic refresh.
+        stat: The key of the stat to unset.
+
+    Returns:
+        The raw response dictionary.
+
+    Raises:
+        UserError: If unsetting fails.
+    """
+    try:
+        return await rpc.user_unset(stat=str(stat))
+    except PiazzaSDKError:
+        raise
+    except Exception as exc:
+        raise UserError(f"Failed to unset user setting {stat}: {exc}") from exc

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from piazza_sdk.domain.feed import get_feed as _domain_get_feed
@@ -52,7 +53,7 @@ from piazza_sdk.models.network import HallOfFameItem, Statistics
 from piazza_sdk.models.post import AssetUploadResponse, Post, PostCreatedResponse, PublishingOptions
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Sequence
 
     from piazza_sdk.api.rpc import RPC
     from piazza_sdk.auth import SessionStateManager
@@ -84,12 +85,19 @@ class Network:
 
     # ── Feed ──────────────────────────────────────────────────────────
 
-    async def get_feed(self, limit: int = 50, offset: int = 0, **kwargs: Any) -> Feed:
+    async def get_feed(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        filters: Sequence[FeedFilter] | None = None,
+        **kwargs: Any,
+    ) -> Feed:
         """Get the feed for this network.
 
         Args:
             limit: Maximum number of items to return.
             offset: Number of items to skip.
+            filters: Sequence of FeedFilter instances to apply.
             **kwargs: Additional query parameters.
 
         Returns:
@@ -105,7 +113,9 @@ class Network:
             ```
         """
         await self._ensure_session()
-        return await _domain_get_feed(self._rpc, limit=limit, offset=offset, **kwargs)
+        return await _domain_get_feed(
+            self._rpc, limit=limit, offset=offset, filters=filters, **kwargs
+        )
 
     async def get_user_unread_feed(self, limit: int = 50, offset: int = 0) -> Feed:
         """Get unread posts for the current user.

@@ -16,9 +16,11 @@ from typing import TYPE_CHECKING, Any
 from pydantic import ValidationError as PydanticValidationError
 
 from piazza_sdk.exceptions import FeedError, PiazzaSDKError
-from piazza_sdk.models.feed import Feed, FeedItem
+from piazza_sdk.models.feed import Feed, FeedFilter, FeedItem
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from piazza_sdk.api.rpc import RPC
     from piazza_sdk.auth import SessionStateManager
 
@@ -55,6 +57,7 @@ async def get_feed(
     session: SessionStateManager | None = None,
     limit: int = 50,
     offset: int = 0,
+    filters: Sequence[FeedFilter] | None = None,
     **kwargs: Any,
 ) -> Feed:
     """Get the feed for the current network.
@@ -64,6 +67,7 @@ async def get_feed(
         session: Optional session manager for automatic refresh.
         limit: Maximum number of feed items to return.
         offset: Number of feed items to skip.
+        filters: Sequence of FeedFilter instances to apply.
         **kwargs: Additional filter parameters (folder, instructor_only, etc.).
 
     Returns:
@@ -80,6 +84,10 @@ async def get_feed(
             ```
     """
     try:
+        if filters:
+            for f in filters:
+                kwargs.update(f.to_kwargs())
+
         raw = await rpc.get_my_feed(limit=limit, offset=offset, **kwargs)
         feed_data = _decode_feed_response(raw)
         items = [FeedItem.model_validate(item) for item in feed_data]

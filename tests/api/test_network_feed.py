@@ -94,7 +94,7 @@ class TestGetFeedDelegation:
         with patch("piazza_sdk.api.network._domain_get_feed") as mock:
             mock.return_value = _make_feed()
             await net.get_feed(limit=25, offset=10)
-        mock.assert_awaited_once_with(net._rpc, limit=25, offset=10)
+        mock.assert_awaited_once_with(net._rpc, limit=25, offset=10, filters=None)
 
     @pytest.mark.asyncio
     async def test_passes_kwargs(self) -> None:
@@ -102,7 +102,7 @@ class TestGetFeedDelegation:
         with patch("piazza_sdk.api.network._domain_get_feed") as mock:
             mock.return_value = _make_feed()
             await net.get_feed(limit=50, offset=0, updated=True)
-        mock.assert_awaited_once_with(net._rpc, limit=50, offset=0, updated=True)
+        mock.assert_awaited_once_with(net._rpc, limit=50, offset=0, filters=None, updated=True)
 
 
 class TestGetUserUnreadFeed:

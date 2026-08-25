@@ -63,6 +63,38 @@ class StatisticsStudents(BaseModel):
     )
 
 
+class InstructorStats(BaseModel):
+    """Instructor and course response statistics from network.get_instructor_stats.
+
+    Attributes:
+        total_posts: Total number of posts in the network.
+        unanswered_questions_on_timer: Number of unanswered questions on timer.
+        unanswered_questions: Number of unanswered questions.
+        unanswered_questions_on_timer_due: Number of unanswered questions due on timer.
+        total_contributions: Total contributions count.
+        instructors_response: Total instructor responses count.
+        response_time: Average response time (e.g. in minutes/hours).
+        students_response: Total student responses count.
+        unanswered_followups: Number of unanswered follow-up discussions.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    total_posts: int = Field(default=0, description="Total number of posts")
+    unanswered_questions_on_timer: int = Field(
+        default=0, description="Unanswered questions on timer"
+    )
+    unanswered_questions: int = Field(default=0, description="Unanswered questions count")
+    unanswered_questions_on_timer_due: int = Field(
+        default=0, description="Unanswered questions due on timer"
+    )
+    total_contributions: int = Field(default=0, description="Total contributions count")
+    instructors_response: int = Field(default=0, description="Instructor responses count")
+    response_time: int | float = Field(default=0, description="Average response time")
+    students_response: int = Field(default=0, description="Student responses count")
+    unanswered_followups: int = Field(default=0, description="Unanswered follow-ups count")
+
+
 class StatisticsUser(BaseModel):
     """A single user entry from network statistics.
 

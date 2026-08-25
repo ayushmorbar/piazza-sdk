@@ -8,6 +8,7 @@ from piazza_sdk.exceptions import (
     AuthenticationError,
     ContentError,
     FeedError,
+    NotAuthenticatedError,
     NotFoundError,
     PermissionError,
     PiazzaSDKError,
@@ -57,6 +58,7 @@ class TestHierarchy:
             AuthenticationError,
             RateLimitError,
             NotFoundError,
+            NotAuthenticatedError,
             PermissionError,
             ValidationError,
             ContentError,
@@ -70,3 +72,23 @@ class TestHierarchy:
     def test_can_catch_all(self):
         with pytest.raises(PiazzaSDKError):
             raise NotFoundError("not found")
+
+
+class TestNotAuthenticatedError:
+    """Tests for NotAuthenticatedError."""
+
+    def test_message(self):
+        exc = NotAuthenticatedError("not authenticated")
+        assert str(exc) == "not authenticated"
+
+    def test_default_message(self):
+        exc = NotAuthenticatedError()
+        # No explicit message — base class provides a fallback
+        assert str(exc)  # truthy, non-empty
+
+    def test_inherits_piazza_sdk_error(self):
+        assert issubclass(NotAuthenticatedError, PiazzaSDKError)
+
+    def test_can_catch_as_piazza_sdk_error(self):
+        with pytest.raises(PiazzaSDKError):
+            raise NotAuthenticatedError("no session")

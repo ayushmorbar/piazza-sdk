@@ -118,5 +118,9 @@ class UploadError(PiazzaSDKError):
     """Raised when an asset upload fails."""
 
 
+class NotAuthenticatedError(PiazzaSDKError):
+    """Raised when an operation requires authentication but the session is not authenticated."""
+
+
 class SessionClosedError(PiazzaSDKError):
     """Raised when attempting operations on a closed session."""

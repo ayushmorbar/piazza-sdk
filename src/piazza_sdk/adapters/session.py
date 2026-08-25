@@ -21,7 +21,12 @@ if TYPE_CHECKING:
 import httpx
 
 from piazza_sdk.adapters.auth import _MIN_CSRF_TOKEN_LENGTH, CookieJar, SessionState
-from piazza_sdk.exceptions import AuthenticationError, SessionClosedError, ValidationError
+from piazza_sdk.exceptions import (
+    AuthenticationError,
+    NotAuthenticatedError,
+    SessionClosedError,
+    ValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,9 +149,14 @@ class SessionStateManager:
     def client(self) -> httpx.AsyncClient:
         """HTTP client, raises if session is not active."""
         if self._client is None:
-            raise SessionClosedError(
-                "HTTP client not available — session is not active. "
-                "Use 'async with SessionStateManager(config) as session'."
+            if self._state == SessionState.CLOSED:
+                raise SessionClosedError(
+                    "HTTP client not available — session is not active. "
+                    "Use 'async with SessionStateManager(config) as session'."
+                )
+            raise NotAuthenticatedError(
+                "HTTP client not available — session is not authenticated. "
+                "Call session.login() before making API requests."
             )
         return self._client
 

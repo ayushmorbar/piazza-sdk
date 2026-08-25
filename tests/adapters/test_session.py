@@ -12,7 +12,12 @@ from httpx import Request, Response
 from piazza_sdk.adapters.auth import SessionState
 from piazza_sdk.adapters.session import SessionStateManager, _parse_login_error
 from piazza_sdk.config import PiazzaConfig
-from piazza_sdk.exceptions import AuthenticationError, SessionClosedError, ValidationError
+from piazza_sdk.exceptions import (
+    AuthenticationError,
+    NotAuthenticatedError,
+    SessionClosedError,
+    ValidationError,
+)
 
 
 class TestSessionStateManagerLifecycle:
@@ -28,6 +33,13 @@ class TestSessionStateManagerLifecycle:
         assert not mgr.needs_refresh
         assert mgr._email is None
         assert mgr._password is None
+
+    @pytest.mark.asyncio
+    async def test_client_unauthenticated_raises(self):
+        mgr = self._make_manager()
+        assert mgr._state == SessionState.UNAUTHENTICATED
+        with pytest.raises(NotAuthenticatedError, match="not authenticated"):
+            _ = mgr.client
 
     @pytest.mark.asyncio
     async def test_login_closed_raises(self):

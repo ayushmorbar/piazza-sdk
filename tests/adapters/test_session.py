@@ -12,7 +12,7 @@ from httpx import Request, Response
 from piazza_sdk.adapters.auth import SessionState
 from piazza_sdk.adapters.session import SessionStateManager, _parse_login_error
 from piazza_sdk.config import PiazzaConfig
-from piazza_sdk.exceptions import AuthenticationError, SessionClosedError
+from piazza_sdk.exceptions import AuthenticationError, SessionClosedError, ValidationError
 
 
 class TestSessionStateManagerLifecycle:
@@ -295,6 +295,119 @@ class TestSessionCookieDictFacade:
         mgr._state = SessionState.CLOSED
         mgr.import_cookies({"session_id": "s1"})
         assert mgr._state == SessionState.CLOSED
+
+
+# ---------------------------------------------------------------------------
+# Demo login (R3 — reference-client demo_login parity)
+# ---------------------------------------------------------------------------
+
+
+class TestDemoLogin:
+    """XOR auth/url contract, cookie harvesting, state transitions."""
+
+    def _make_mgr(self) -> SessionStateManager:
+        return SessionStateManager(PiazzaConfig(course_id="demo_nid"))
+
+    def _mock_demo_success(self, mgr: SessionStateManager, html: str = "<html>ok</html>") -> None:
+        resp = Response(200, text=html, request=Request("GET", "x"))
+        mgr._client = AsyncMock()
+        mgr._client.get = AsyncMock(return_value=resp)
+        # cookies must be a plain dict (items() is sync in httpx)
+        mgr._client.cookies = {"demo_session": "abc123"}
+        mgr._client.headers = {}
+
+    @pytest.mark.asyncio
+    async def test_xor_both_raises(self):
+        mgr = self._make_mgr()
+        with pytest.raises(ValidationError, match="exactly one"):
+            await mgr.demo_login(auth="tok", url="https://piazza.com/demo_login")
+
+    @pytest.mark.asyncio
+    async def test_xor_neither_raises(self):
+        mgr = self._make_mgr()
+        with pytest.raises(ValidationError, match="exactly one"):
+            await mgr.demo_login()
+
+    @pytest.mark.asyncio
+    async def test_auth_builds_url_with_nid(self):
+        mgr = self._make_mgr()
+        self._mock_demo_success(mgr)
+        await mgr.demo_login(auth="06c111b")
+        # First GET is the demo link; later GETs belong to best-effort CSRF
+        called_url = str(mgr._client.get.call_args_list[0][0][0])
+        assert "demo_login" in called_url
+        assert "nid=demo_nid" in called_url
+        assert "auth=06c111b" in called_url
+        assert mgr._state == SessionState.AUTHENTICATED
+
+    @pytest.mark.asyncio
+    async def test_full_url_used_verbatim(self):
+        mgr = self._make_mgr()
+        self._mock_demo_success(mgr)
+        target = "https://piazza.com/demo_login?nid=x&auth=y"
+        await mgr.demo_login(url=target)
+        assert str(mgr._client.get.call_args_list[0][0][0]) == target
+        assert mgr._state == SessionState.AUTHENTICATED
+
+    @pytest.mark.asyncio
+    async def test_cookies_harvested_into_jar(self):
+        mgr = self._make_mgr()
+        self._mock_demo_success(mgr)
+        await mgr.demo_login(auth="tok")
+        assert mgr._cookies.get("demo_session") == "abc123"
+
+    @pytest.mark.asyncio
+    async def test_no_cookies_rejected(self):
+        mgr = self._make_mgr()
+        self._mock_demo_success(mgr)
+        mgr._client.cookies = {}
+        with pytest.raises(AuthenticationError, match="no session cookies"):
+            await mgr.demo_login(auth="expired")
+        assert mgr._state == SessionState.UNAUTHENTICATED
+
+    @pytest.mark.asyncio
+    async def test_http_404_rejected(self):
+        """Live-verified contract: invalid share links return 404 + anon cookie."""
+        mgr = self._make_mgr()
+        resp = Response(404, text="<html>not found</html>", request=Request("GET", "x"))
+        mgr._client = AsyncMock()
+        mgr._client.get = AsyncMock(return_value=resp)
+        # Server still sets an anonymous session_id — must not be adopted
+        mgr._client.cookies = {"session_id": "anon"}
+        with pytest.raises(AuthenticationError, match="HTTP 404"):
+            await mgr.demo_login(auth="deadbeef00")
+        assert mgr._state == SessionState.UNAUTHENTICATED
+
+    @pytest.mark.asyncio
+    async def test_closed_session_rejected(self):
+        mgr = self._make_mgr()
+        mgr._state = SessionState.CLOSED
+        with pytest.raises(SessionClosedError):
+            await mgr.demo_login(auth="tok")
+
+    @pytest.mark.asyncio
+    async def test_already_authenticated_rejected(self):
+        mgr = self._make_mgr()
+        mgr._state = SessionState.AUTHENTICATED
+        with pytest.raises(AuthenticationError, match="Already authenticated"):
+            await mgr.demo_login(auth="tok")
+
+    @pytest.mark.asyncio
+    async def test_csrf_header_set_when_token_available(self):
+        mgr = self._make_mgr()
+        self._mock_demo_success(mgr)
+        # Stub CSRF fetch: dedicated endpoint returns a token page
+        csrf_resp = Response(
+            200, text='window.CSRF_TOKEN = "' + "c" * 40 + '";', request=Request("GET", "x")
+        )
+
+        async def fake_fetch(self: SessionStateManager) -> str | None:
+            mgr._client.get = AsyncMock(return_value=csrf_resp)
+            return "c" * 40
+
+        with patch.object(SessionStateManager, "_fetch_csrf_token", new=fake_fetch):
+            await mgr.demo_login(auth="tok")
+        assert mgr._cookies.csrf_token == "c" * 40
 
 
 # ---------------------------------------------------------------------------

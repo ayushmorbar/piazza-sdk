@@ -44,18 +44,27 @@ class SessionManagerProtocol(Protocol):
         """True when the session has exceeded its lifetime and must be refreshed."""
         ...
 
-    async def login(self, email: str, password: str) -> None:
+    async def login(self, email: str | None = None, password: str | None = None) -> None:
         """Authenticate with Piazza using email and password.
 
         Args:
-            email: User email address.
-            password: User password.
+            email: User email address. When *None*, prompted interactively.
+            password: User password. When *None*, prompted interactively.
 
         Example:
             ```python
             # Example for login
             res = await login(email='...', password='...')
             ```
+        """
+        ...
+
+    async def demo_login(self, auth: str | None = None, url: str | None = None) -> None:
+        """Authenticate as a demo user via a "Share Your Class" link.
+
+        Args:
+            auth: Share-link token (mutually exclusive with *url*).
+            url: Full demo-login URL (mutually exclusive with *auth*).
         """
         ...
 

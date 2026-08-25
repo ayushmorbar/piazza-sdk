@@ -146,9 +146,27 @@ class NetworkInfo(BaseModel):
     short_number: str = Field(default="", description="Short course number for resource URLs")
     anonymity: str = Field(default="", description="Anonymity policy string")
     auto_join: str = Field(default="", description="Auto-join policy string")
+    auth: str = Field(
+        default="",
+        description=(
+            "Share-link token from user.status — feed to "
+            "SessionStateManager.demo_login() or append to a demo_login URL"
+        ),
+    )
     config: NetworkConfig | None = Field(
         default=None, description="Parsed network configuration with role permissions"
     )
+
+    @property
+    def demo_login_url(self) -> str:
+        """Build the "Share Your Class" demo-login URL for this course.
+
+        Returns an empty string when the share token is absent (e.g. the
+        entry came from ``all_classes`` rather than ``user.status``).
+        """
+        if not self.auth or not self.nid:
+            return ""
+        return f"https://piazza.com/demo_login?nid={self.nid}&auth={self.auth}"
 
     @property
     def resources_url(self) -> str:

@@ -66,6 +66,7 @@ def parse_network_entry(entry: dict[str, Any]) -> NetworkInfo:
         users=int(entry["user_count"]) if isinstance(entry.get("user_count"), int) else 0,
         folders=[f for f in entry.get("folders", []) if isinstance(f, str)],
         status=entry.get("status"),
+        auth=str(entry.get("auth", "") or ""),
         school_ext=str(entry.get("school_ext", "")),
         short_number=str(entry.get("short_number", "")),
         anonymity=str(entry.get("anonymity", "")) if entry.get("anonymity") is not None else "",

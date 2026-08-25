@@ -144,6 +144,32 @@ class TestNetworkInfoCapabilities:
         assert NetworkInfo(term="Fall 2030").resources_url == ""
 
 
+# ── share-link auth token / demo_login_url ──────────────────────────────
+
+
+class TestNetworkInfoShareAuth:
+    def test_auth_parsed_from_user_status_entry(self):
+        info = parse_network_entry(_network_entry(auth="fd13d72"))
+        assert info.auth == "fd13d72"
+
+    def test_auth_defaults_empty(self):
+        info = parse_network_entry(_network_entry())
+        assert info.auth == ""
+
+    def test_auth_none_coerced_to_empty(self):
+        info = parse_network_entry(_network_entry(auth=None))
+        assert info.auth == ""
+
+    def test_demo_login_url_with_token(self):
+        info = parse_network_entry(_network_entry(auth="06c111b"))
+        assert (
+            info.demo_login_url == "https://piazza.com/demo_login?nid=mqsgm1zclb114z&auth=06c111b"
+        )
+
+    def test_demo_login_url_empty_without_token(self):
+        assert parse_network_entry(_network_entry()).demo_login_url == ""
+
+
 # ── get_network_info ────────────────────────────────────────────────────
 
 

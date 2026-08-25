@@ -39,6 +39,18 @@ class Piazza:
         self._networks: dict[str, Network] = {}
         self._user_rpc: RPC | None = None
 
+    async def demo_login(self, auth: str | None = None, url: str | None = None) -> None:
+        """Authenticate as a demo user via a "Share Your Class" link.
+
+        Delegates to the underlying :class:`SessionStateManager`. Provide
+        exactly one of *auth* (share-link token) or the full demo *url*.
+
+        Raises:
+            ValidationError: If both or neither of *auth*/*url* is given.
+            AuthenticationError: If the demo link is rejected by the server.
+        """
+        await self._session.demo_login(auth=auth, url=url)
+
     def _retry_kwargs(self) -> dict[str, Any]:
         """Map SessionConfig retry knobs onto RPC kwargs (when numeric)."""
         retries = getattr(self._session.config, "retries", None)

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 import httpx
 
 from piazza_sdk.adapters.auth import _MIN_CSRF_TOKEN_LENGTH, CookieJar, SessionState
-from piazza_sdk.exceptions import AuthenticationError, SessionClosedError
+from piazza_sdk.exceptions import AuthenticationError, SessionClosedError, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +251,100 @@ class SessionStateManager:
         except httpx.RequestError as exc:
             self._state = SessionState.UNAUTHENTICATED
             raise AuthenticationError(f"Network error during login: {exc}") from exc
+
+    async def demo_login(self, auth: str | None = None, url: str | None = None) -> None:
+        """Authenticate as a demo user via a "Share Your Class" link.
+
+        Reference-client contract: provide exactly one of *auth* (the
+        share-link token) or the full demo-login *url*.
+
+        Transitions: UNAUTHENTICATED → AUTHENTICATING → AUTHENTICATED
+
+        Args:
+            auth: Share-link token, e.g. ``"06c111b"``. Mutually exclusive
+                with *url*.
+            url: Full share URL, e.g.
+                ``"https://piazza.com/demo_login?nid=hbj11a1gcvl1s6&auth=06c111b"``.
+                Mutually exclusive with *auth*.
+
+        Raises:
+            ValidationError: If both or neither of *auth*/*url* is given.
+            AuthenticationError: If the demo link is rejected by the server.
+            SessionClosedError: If session is already closed.
+        """
+        if self._state == SessionState.CLOSED:
+            raise SessionClosedError("Cannot login — session is closed.")
+        if self._state == SessionState.AUTHENTICATED:
+            raise AuthenticationError("Already authenticated.")
+        if bool(auth) == bool(url):
+            raise ValidationError(
+                "demo_login requires exactly one of 'auth' or 'url', not both/neither."
+            )
+
+        target = (
+            url
+            if url is not None
+            else f"{self.config.base_url.rstrip('/')}/demo_login"
+            f"?nid={self.config.course_id}&auth={auth}"
+        )
+        self._state = SessionState.AUTHENTICATING
+        try:
+            response = await self.client.get(target)
+            await self._finish_demo_login(response)
+        except httpx.HTTPStatusError as exc:
+            self._state = SessionState.UNAUTHENTICATED
+            raise AuthenticationError(
+                f"HTTP error during demo login: {exc.response.status_code}"
+            ) from exc
+        except TimeoutError as exc:
+            self._state = SessionState.UNAUTHENTICATED
+            raise AuthenticationError(f"Demo login request timed out: {exc}") from exc
+        except httpx.RequestError as exc:
+            self._state = SessionState.UNAUTHENTICATED
+            raise AuthenticationError(f"Network error during demo login: {exc}") from exc
+
+    async def _finish_demo_login(self, response: httpx.Response) -> None:
+        """Validate demo-link response and adopt the granted session."""
+        # Invalid/expired share links land on a 404 while still setting an
+        # anonymous ``session_id`` cookie — require an explicit 200.
+        if response.status_code != 200:
+            self._state = SessionState.UNAUTHENTICATED
+            raise AuthenticationError(
+                f"Demo link rejected by server (HTTP {response.status_code}) — "
+                "link may be expired or invalid."
+            )
+
+        # Harvest cookies granted by the demo link into our CookieJar.
+        assert self._client is not None  # noqa: S101 - active-session invariant
+        for name, value in self._client.cookies.items():
+            self._cookies.set(name, value)
+
+        server_error = _parse_login_error(response.text)
+        if server_error:
+            self._state = SessionState.UNAUTHENTICATED
+            raise AuthenticationError(f"Demo login rejected: {server_error}")
+
+        if not self._cookies.cookies:
+            self._state = SessionState.UNAUTHENTICATED
+            raise AuthenticationError(
+                "Demo login returned no session cookies — link may be expired or invalid."
+            )
+
+        # Best-effort CSRF acquisition so subsequent RPC calls carry a
+        # token; demo sessions may be scoped tighter than full accounts.
+        csrf_token = await self._fetch_csrf_token()
+        if csrf_token is not None and len(csrf_token) >= _MIN_CSRF_TOKEN_LENGTH:
+            self._client.headers["csrf-token"] = csrf_token
+            self._cookies.csrf_token = csrf_token
+        else:
+            logger.warning("No CSRF token after demo login — RPC calls may fail")
+
+        self._state = SessionState.AUTHENTICATED
+        self._login_time = time.time()
+        logger.info("Demo login successful for course %s", self.config.course_id)
+
+        if self._cookie_path is not None:
+            await self._cookies.save(self._cookie_path)
 
     async def _fetch_csrf_token(self) -> str | None:
         """Acquire a CSRF token via the dedicated endpoint, page scrape as fallback.

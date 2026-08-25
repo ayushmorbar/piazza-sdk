@@ -7,6 +7,7 @@ cookie management, request lifecycle, and automatic session refresh.
 from __future__ import annotations
 
 import asyncio
+import getpass
 import logging
 import re
 import time
@@ -164,10 +165,26 @@ class SessionStateManager:
             return False
         return age > self._session_lifetime
 
-    async def login(self, email: str, password: str) -> None:
+    @staticmethod
+    def _prompt_missing_credentials(email: str | None, password: str | None) -> tuple[str, str]:
+        """Return (email, password), prompting interactively where *None*."""
+        if email is None:
+            email = input("Email: ")
+        if password is None:
+            password = getpass.getpass("Password: ")
+        logger.info("Interactive credential entry (reference-client login UX)")
+        return email, password
+
+    async def login(self, email: str | None = None, password: str | None = None) -> None:
         """Authenticate with Piazza using email and password.
 
         Transitions: UNAUTHENTICATED → AUTHENTICATING → AUTHENTICATED
+
+        When *email* or *password* is omitted, the missing values are
+        prompted interactively on the terminal (``input`` for email,
+        ``getpass`` for password — reference-client CLI parity), so
+        ``await session.login()`` works in REPLs and scripts without
+        hardcoding credentials.
 
         Raises:
             AuthenticationError: If login fails or CSRF token is invalid.
@@ -183,7 +200,9 @@ class SessionStateManager:
             raise SessionClosedError("Cannot login — session is closed.")
         if self._state == SessionState.AUTHENTICATED:
             raise AuthenticationError("Already authenticated.")
-        if not email or not email.strip() or not password or not password.strip():
+        if email is None or password is None:
+            email, password = self._prompt_missing_credentials(email, password)
+        if not email.strip() or not password.strip():
             raise AuthenticationError("Email and password cannot be empty or whitespace.")
 
         self._state = SessionState.AUTHENTICATING

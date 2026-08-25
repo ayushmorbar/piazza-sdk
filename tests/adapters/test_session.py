@@ -295,3 +295,86 @@ class TestSessionCookieDictFacade:
         mgr._state = SessionState.CLOSED
         mgr.import_cookies({"session_id": "s1"})
         assert mgr._state == SessionState.CLOSED
+
+
+# ---------------------------------------------------------------------------
+# Interactive prompt login (R2 — reference-client login() parity)
+# ---------------------------------------------------------------------------
+
+
+class TestInteractivePromptLogin:
+    """When email/password are None, login() prompts interactively."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_prompts(self, monkeypatch) -> None:  # noqa: ANN202
+        """Provide default prompt stubs; individual tests override as needed."""
+        monkeypatch.setattr("builtins.input", lambda _msg="": "prompted@x.com")
+        monkeypatch.setattr(
+            "piazza_sdk.adapters.session.getpass.getpass", lambda _msg="": "prompted_pass"
+        )
+
+    def _mock_login_success(self, mgr: SessionStateManager) -> None:
+        """Wire up a fake client so login completes after prompting."""
+        csrf_resp = Response(
+            200, text='window.CSRF_TOKEN = "' + "t" * 40 + '";', request=Request("GET", "x")
+        )
+        # Successful login: 200 + no ERROR_MSG
+        login_resp = Response(200, text="<html>ok</html>", request=Request("POST", "x"))
+        mgr._client = AsyncMock()
+        mgr._client.get = AsyncMock(return_value=csrf_resp)
+        mgr._client.post = AsyncMock(return_value=login_resp)
+        # cookies must be a plain dict (items() is sync in httpx)
+        fake_cookies: dict[str, str] = {"session_id": "sid123"}
+        mgr._client.cookies = fake_cookies
+
+    @pytest.mark.asyncio
+    async def test_both_none_triggers_both_prompts(self):
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        self._mock_login_success(mgr)
+        await mgr.login(email=None, password=None)
+        assert mgr._state == SessionState.AUTHENTICATED
+        # Verify the prompted email reached the POST payload
+        call_kwargs = mgr._client.post.call_args
+        assert call_kwargs[1]["data"]["email"] == "prompted@x.com"
+        assert call_kwargs[1]["data"]["password"] == "prompted_pass"
+
+    @pytest.mark.asyncio
+    async def test_only_password_none(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda _msg="": "should-not-be-used")
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        self._mock_login_success(mgr)
+        await mgr.login(email="explicit@x.com", password=None)
+        call_kwargs = mgr._client.post.call_args
+        assert call_kwargs[1]["data"]["email"] == "explicit@x.com"
+        assert call_kwargs[1]["data"]["password"] == "prompted_pass"
+
+    @pytest.mark.asyncio
+    async def test_explicit_args_skip_prompts(self, monkeypatch):
+        monkeypatch.setattr(
+            "builtins.input",
+            lambda _msg="": (_ for _ in ()).throw(AssertionError("input() called")),
+        )
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        self._mock_login_success(mgr)
+        await mgr.login(email="a@b.com", password="secret")
+        assert mgr._state == SessionState.AUTHENTICATED
+        call_kwargs = mgr._client.post.call_args
+        assert call_kwargs[1]["data"]["email"] == "a@b.com"
+
+    @pytest.mark.asyncio
+    async def test_blank_prompted_email_rejected(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda _msg="": "   ")
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        self._mock_login_success(mgr)
+        with pytest.raises(AuthenticationError, match="empty or whitespace"):
+            await mgr.login(email=None, password="pw")
+        assert mgr._state == SessionState.UNAUTHENTICATED
+
+    @pytest.mark.asyncio
+    async def test_blank_prompted_password_rejected(self, monkeypatch):
+        monkeypatch.setattr("piazza_sdk.adapters.session.getpass.getpass", lambda _msg="": "   ")
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        self._mock_login_success(mgr)
+        with pytest.raises(AuthenticationError, match="empty or whitespace"):
+            await mgr.login(email="a@b.com", password=None)
+        assert mgr._state == SessionState.UNAUTHENTICATED

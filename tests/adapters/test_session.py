@@ -503,3 +503,28 @@ class TestInteractivePromptLogin:
         with pytest.raises(AuthenticationError, match="empty or whitespace"):
             await mgr.login(email="a@b.com", password=None)
         assert mgr._state == SessionState.UNAUTHENTICATED
+
+
+class TestPreLoginGuard:
+    """Tests for client property guard before login."""
+
+    def test_client_unauthenticated_raises(self):
+        """Accessing .client before login raises NotAuthenticatedError."""
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        assert mgr._state == SessionState.UNAUTHENTICATED
+        with pytest.raises(NotAuthenticatedError, match="session.login"):
+            _ = mgr.client
+
+    def test_client_closed_still_raises_session_closed(self):
+        """Accessing .client after close() raises SessionClosedError."""
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        mgr._state = SessionState.CLOSED
+        with pytest.raises(SessionClosedError, match="session is not active"):
+            _ = mgr.client
+
+    def test_client_authenticated_returns_client(self):
+        """Accessing .client after login returns the httpx client."""
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        mgr._state = SessionState.AUTHENTICATED
+        mgr._client = httpx.AsyncClient()
+        assert mgr.client is mgr._client

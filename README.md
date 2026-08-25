@@ -20,6 +20,7 @@
 - **Instructor-only follow-ups** and student-perspective (`student_view`) reads
 - **Global email preferences** - per-course notification control + bulk opt-out
 - **Role permission matrix** - pre-flight capability checks from `user.status`
+- **Flexible auth** - interactive prompt login, cookie hand-off, demo (share-link) login
 - **User management** - profiles, classes, permissions
 - **Rate limiting** with automatic retry and exponential backoff
 - **Comprehensive exception hierarchy** for fine-grained error handling
@@ -136,6 +137,29 @@ info = await network.info()
 if await network.can("instructor", "new_post"):
     ...
 print(info.resources_url)  # https://piazza.com/{school_ext}/{term}/{num}/home
+```
+
+### Authentication Patterns
+
+```python
+# Interactive prompt login — omit either argument to be prompted
+await session.login()                      # prompts for email + password
+await session.login(email="you@x.com")     # prompts for password only
+
+# Cookie hand-off between sessions/processes (plain dict, JSON-safe)
+cookies = session.export_cookies()
+# ... later, in a fresh process:
+async with SessionStateManager(config) as s2:
+    s2.import_cookies(cookies)
+    alive = await s2.is_session_alive()
+
+# Demo login via "Share Your Class" link (instructors can discover theirs)
+info = await piazza.network(nid).info()
+print(info.demo_login_url)  # https://piazza.com/demo_login?nid=...&auth=...
+async with SessionStateManager(config) as demo:
+    await demo.demo_login(auth=info.auth)          # token or full URL
+    await demo.demo_login(url=str(share_url))      # exactly one of the two
+    feed = await Piazza(demo).network(nid).get_feed(limit=5)
 ```
 
 ### Filters

@@ -11,6 +11,29 @@ Reference-client parity wave: features ported from `d4l3k/piazza-api` (Go)
 and `hfaran/Piazza-API` (Python), each verified against the live Piazza API.
 
 ### Added — (2026-08)
+- **Interactive prompt login** (`8c7bf44`): `login()` now accepts
+  `email=None`/`password=None` and prompts on the terminal (`input`,
+  `getpass`) — hfaran-client CLI parity for REPLs and scripts.
+- **Demo login** (`0bf3bfa`): `SessionStateManager.demo_login(auth=|url=)`
+  authenticates via "Share Your Class" links (XOR contract; `ValidationError`
+  when both/neither given).
+  - Live-discovered wire contract: invalid/expired share links return
+    **HTTP 404** while still setting an anonymous `session_id` cookie —
+    non-200 responses raise `AuthenticationError`.
+  - Positive path live-verified: real token grants `piazza_session`
+    cookies, CSRF is acquired, and the demo session reads the feed via
+    `network.get_my_feed`.
+  - `NetworkInfo.auth` + `NetworkInfo.demo_login_url` surface the share
+    token parsed from `user.status networks[]`, closing the loop:
+    instructor discovers link → anonymous session adopts it.
+  - Known limitation: `is_session_alive()` returns `False` for demo users
+    — `memo.get_unread_message_count` is outside demo scope.
+- **Cookie dict export/import** (`b28c69b`):
+  `CookieJar.export_dict()/import_dict()` +
+  `SessionStateManager.export_cookies()/import_cookies()` for plain-dict
+  hand-off between sessions/processes; import transitions an active
+  UNAUTHENTICATED session to AUTHENTICATED. Live-verified: export → fresh
+  session → import → class page reachable without re-login.
 - **Login hardening** (`892f1ec`):
   - CSRF token now acquired from the dedicated `GET /main/csrf_token`
     endpoint (JS-assignment parse), with the legacy login-page `<meta>`

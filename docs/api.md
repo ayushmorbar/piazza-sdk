@@ -86,6 +86,50 @@ headers = session.get_auth_headers()
 # Returns: {"x-csrf-token": "..."} or {}
 ```
 
+### Interactive Prompt Login
+
+Omit either credential to be prompted on the terminal (`input` for email,
+`getpass` for password):
+
+```python
+await session.login()                    # prompts for both
+await session.login(email="you@x.com")   # prompts for password only
+```
+
+### Cookie Hand-off
+
+Export/import the session as a plain dict (JSON-safe) for moving a login
+between processes without storing passwords:
+
+```python
+cookies = session.export_cookies()
+
+# ... fresh session:
+async with SessionStateManager(config) as s2:
+    s2.import_cookies(cookies)          # active sessions become AUTHENTICATED
+    alive = await s2.is_session_alive()
+```
+
+### Demo Login ("Share Your Class")
+
+Authenticate an anonymous session via an instructor share link. Provide
+exactly one of `auth=` (token) or `url=` (full link):
+
+```python
+# Discover your token from an authenticated session
+info = await piazza.network(nid).info()
+print(info.demo_login_url)
+# https://piazza.com/demo_login?nid=<nid>&auth=<token>
+
+async with SessionStateManager(config) as demo:
+    await demo.demo_login(auth=info.auth)     # or: url=info.demo_login_url
+    feed = await Piazza(demo).network(nid).get_feed(limit=5)
+```
+
+Invalid/expired links are rejected by the server with HTTP 404 and raise
+`AuthenticationError`. Note that `is_session_alive()` returns `False` for
+demo users — the liveness probe endpoint is outside demo scope.
+
 ### Logout
 
 Terminate the session and release resources:
@@ -99,6 +143,9 @@ await session.logout()  # Alias for session.close()
       show_source: false
       members:
         - login
+        - demo_login
+        - export_cookies
+        - import_cookies
         - logout
         - close
         - refresh

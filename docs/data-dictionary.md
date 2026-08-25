@@ -1031,6 +1031,8 @@ When code and this table disagree, trust the table and file a bug.
 | **Private posts** | Instructor-only visibility via `config.feed_groups = "instr_{nid},{user_id}"`; verified by create → read-back → delete. Requires an existing folder like any post. |
 | **Instructor follow-ups** | Followups accept `config: {"editor": "rte", "ionly": true}` for staff-only replies; `ionly` observed verbatim on read-back. |
 | **student_view** | `content.get` accepts `student_view: true` to render the student-visible view of a post from a staff account. |
+| **Share-link token** | `user.status` → `networks[].auth` carries the course's "Share Your Class" token (e.g. `"fd13d72"`); absent/empty on `all_classes` entries. Feeds `demo_login` and `NetworkInfo.demo_login_url`. |
+| **Demo login** | `GET /demo_login?nid=…&auth=…` grants a demo session: valid tokens return HTTP 200 and set real session cookies (`piazza_session`, `last_piaz_user`, CSRF acquirable, feed readable via `network.get_my_feed`). **Invalid/expired tokens return HTTP 404 while still setting an anonymous `session_id`** — status code must be checked before adopting cookies. Demo scope excludes `memo.get_unread_message_count` (so `is_session_alive()` is `False` for demo users). Both forms live-verified. |
 
 
 ---

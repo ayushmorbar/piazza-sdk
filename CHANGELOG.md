@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [CalVer](https://calver.org/) (`YYYY.MM.DD`).
 
-## [Unreleased]
+## [2026.08.26.1] - 2026-08-26
 
 Reference-client parity wave: features ported from `d4l3k/piazza-api` (Go)
 and `hfaran/Piazza-API` (Python), each verified against the live Piazza API.

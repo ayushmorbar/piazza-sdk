@@ -6,6 +6,7 @@ Provides standalone functions for post creation, modification, and management.
 from __future__ import annotations
 
 __all__ = [
+    "_coerce_cid",
     "add_followup",
     "add_tag",
     "answer_post",
@@ -59,6 +60,36 @@ if TYPE_CHECKING:
     from piazza_sdk.auth import SessionStateManager
     from piazza_sdk.models.enums import PostType
     from piazza_sdk.models.post import PublishingOptions
+
+from piazza_sdk.models.post import Post
+
+
+def _coerce_cid(value: Post | str | int) -> str:
+    """Extract a string post/child ID from a polymorphic *cid* argument.
+
+    Accepts a :class:`~piazza_sdk.models.post.Post` model (extracts ``.id``),
+    an ``int`` (converts to ``str``), or a ``str`` (returned as-is).
+
+    Raises:
+        TypeError: If *value* is not one of the accepted types.
+
+    Examples:
+        >>> _coerce_cid("j5yj4g5d4p2qg3")
+        'j5yj4g5d4p2qg3'
+        >>> _coerce_cid(42)
+        '42'
+        >>> _coerce_cid(Post(id="abc123"))
+        'abc123'
+    """
+    if isinstance(value, Post):
+        return value.id
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        raise TypeError(f"cid must be str, int, or Post, got {type(value).__name__}")
+    if isinstance(value, int):
+        return str(value)
+    raise TypeError(f"cid must be str, int, or Post, got {type(value).__name__}")
 
 
 def _apply_reference_flags(
@@ -195,7 +226,7 @@ async def add_followup(  # noqa: PLR0913
     rpc: RPC,
     *,
     session: SessionStateManager | None = None,
-    post_id: str,
+    post_id: Post | str | int,
     content: str,
     anonymous: bool = False,
     options: PublishingOptions | None = None,
@@ -207,7 +238,9 @@ async def add_followup(  # noqa: PLR0913
     Args:
         rpc: RPC client instance.
         session: Optional session manager for automatic refresh.
-        post_id: ID of the parent post.
+        post_id: ID of the parent post. Accepts a :class:`Post` model
+            (extracts ``.id``), an ``int`` (converted to ``str``), or a
+            ``str``.
         content: Followup content.
         anonymous: Whether to post anonymously.
         options: Publishing options.
@@ -240,8 +273,9 @@ async def add_followup(  # noqa: PLR0913
     if options is not None:
         extra.update(options.to_kwargs())
     anon_str = "stud" if anonymous else "no"
+    cid = _coerce_cid(post_id)
     raw = await rpc.content_create(
-        type="followup", cid=post_id, subject=content, content=content, anonymous=anon_str, **extra
+        type="followup", cid=cid, subject=content, content=content, anonymous=anon_str, **extra
     )
     result = raw.get("result", raw)
     return PostCreatedResponse.model_validate(result)
@@ -251,7 +285,7 @@ async def create_reply(  # noqa: PLR0913
     rpc: RPC,
     *,
     session: SessionStateManager | None = None,
-    post_id: str,
+    post_id: Post | str | int,
     content: str,
     anonymous: bool = False,
     options: PublishingOptions | None = None,
@@ -263,6 +297,8 @@ async def create_reply(  # noqa: PLR0913
         rpc: RPC client instance.
         session: Optional session manager for automatic refresh.
         post_id: ID of the follow-up (the parent of this reply).
+            Accepts a :class:`Post` model (extracts ``.id``), an ``int``
+            (converted to ``str``), or a ``str``.
         content: Reply content.
         anonymous: Whether to post anonymously.
         options: Publishing options.
@@ -286,8 +322,9 @@ async def create_reply(  # noqa: PLR0913
     if options is not None:
         extra.update(options.to_kwargs())
     anon_str = "stud" if anonymous else "no"
+    cid = _coerce_cid(post_id)
     raw = await rpc.content_create(
-        type="feedback", cid=post_id, subject=content, content=content, anonymous=anon_str, **extra
+        type="feedback", cid=cid, subject=content, content=content, anonymous=anon_str, **extra
     )
     result = raw.get("result", raw)
     return PostCreatedResponse.model_validate(result)
@@ -493,7 +530,7 @@ async def remove_tag(
 
 
 async def resolve_post(
-    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: Post | str | int
 ) -> bool:
     """Mark a post as resolved.
 
@@ -507,7 +544,9 @@ async def resolve_post(
     Args:
         rpc: RPC client instance.
         session: Optional session manager for automatic refresh.
-        post_id: ID of the post to resolve.
+        post_id: ID of the post to resolve. Accepts a :class:`Post`
+            model (extracts ``.id``), an ``int`` (converted to ``str``),
+            or a ``str``.
 
     Returns:
         True if the operation succeeded.
@@ -535,13 +574,14 @@ async def resolve_post(
             print("Post marked as resolved")
         ```
     """
-    if not post_id or not post_id.strip():
+    if isinstance(post_id, str) and not post_id.strip():
         raise ValidationError("post_id must be non-empty")
+    cid = _coerce_cid(post_id)
     post_data: dict[str, Any] = {}
     if hasattr(rpc, "content_get"):
         # Annotated ``Any``: duck-typed RPCs (mocks, alternate transports) may
         # return a bare dict instead of a coroutine.
-        res: Any = rpc.content_get(post_id)
+        res: Any = rpc.content_get(cid)
         if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
             post_data = await res
         elif isinstance(res, dict):
@@ -554,7 +594,7 @@ async def resolve_post(
     content = first_hist.get("content", post_data.get("content", ""))
     folders = post_data.get("folders", ["other"])
     raw: Any = await rpc.content_update(
-        cid=post_id,
+        cid=cid,
         subject=subject,
         content=content,
         folders=folders,
@@ -567,7 +607,7 @@ async def resolve_post(
 
 
 async def unresolve_post(
-    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: Post | str | int
 ) -> bool:
     """Mark a resolved post as active (unresolve).
 
@@ -578,7 +618,9 @@ async def unresolve_post(
     Args:
         rpc: RPC client instance.
         session: Optional session manager for automatic refresh.
-        post_id: ID of the post to unresolve.
+        post_id: ID of the post to unresolve. Accepts a :class:`Post`
+            model (extracts ``.id``), an ``int`` (converted to ``str``),
+            or a ``str``.
 
     Returns:
         True if the operation succeeded.
@@ -606,11 +648,12 @@ async def unresolve_post(
             print("Post reopened successfully")
         ```
     """
-    if not post_id or not post_id.strip():
+    if isinstance(post_id, str) and not post_id.strip():
         raise ValidationError("post_id must be non-empty")
+    cid = _coerce_cid(post_id)
     post_data: dict[str, Any] = {}
     if hasattr(rpc, "content_get"):
-        res: Any = rpc.content_get(post_id)
+        res: Any = rpc.content_get(cid)
         if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
             post_data = await res
         elif isinstance(res, dict):
@@ -623,7 +666,7 @@ async def unresolve_post(
     content = first_hist.get("content", post_data.get("content", ""))
     folders = post_data.get("folders", ["other"])
     raw: Any = await rpc.content_update(
-        cid=post_id,
+        cid=cid,
         subject=subject,
         content=content,
         folders=folders,

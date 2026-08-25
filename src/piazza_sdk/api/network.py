@@ -391,6 +391,8 @@ class Network:
         folders: list[str] | None = None,
         private_to_staff: bool = False,
         author_uid: str | None = None,
+        is_announcement: bool = False,
+        bypass_email: bool = False,
         **kwargs: Any,
     ) -> PostCreatedResponse:
         """Create a new post.
@@ -409,6 +411,11 @@ class Network:
                 *author_uid* given).
             author_uid: Pre-resolved author user ID for
                 *private_to_staff*, skipping the profile lookup.
+            is_announcement: Flag as an announcement via
+                ``config.is_announcement = 1``; omitted when unset.
+            bypass_email: Suppress notification email via top-level
+                ``prof_override = True`` plus ``config.bypass_email = 1``;
+                omitted when unset. Caller ``config`` keys win.
             **kwargs: Additional parameters to pass to the API.
 
         Returns:
@@ -437,6 +444,8 @@ class Network:
             folders=folders,
             private_to_staff=private_to_staff,
             author_uid=author_uid,
+            is_announcement=is_announcement,
+            bypass_email=bypass_email,
             **kwargs,
         )
 

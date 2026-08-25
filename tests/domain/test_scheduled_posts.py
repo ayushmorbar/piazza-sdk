@@ -191,6 +191,63 @@ class TestCreatePostPrivate:
 
 
 # ---------------------------------------------------------------------------
+# Announcement + bypass_email flags (hfaran parity)
+# ---------------------------------------------------------------------------
+
+
+class TestCreatePostFlags:
+    """is_announcement -> config key; bypass_email -> prof_override."""
+
+    @staticmethod
+    def _rpc() -> MagicMock:
+        rpc = MagicMock()
+        rpc.network_id = "nid_1"
+        rpc.content_create = AsyncMock(return_value={"id": "p_new"})
+        return rpc
+
+    async def test_defaults_omit_both_keys(self):
+        rpc = self._rpc()
+        await create_post(rpc, title="t", content="c")
+        kwargs = rpc.content_create.await_args.kwargs
+        assert "prof_override" not in kwargs
+        assert "config" not in kwargs
+
+    async def test_announcement_injects_config_int(self):
+        rpc = self._rpc()
+        await create_post(rpc, title="t", content="c", is_announcement=True)
+        assert rpc.content_create.await_args.kwargs["config"] == {"is_announcement": 1}
+
+    async def test_bypass_email_sets_prof_override_and_config(self):
+        rpc = self._rpc()
+        await create_post(rpc, title="t", content="c", bypass_email=True)
+        kwargs = rpc.content_create.await_args.kwargs
+        assert kwargs["prof_override"] is True
+        assert kwargs["config"] == {"bypass_email": 1}
+
+    async def test_combined_flags(self):
+        rpc = self._rpc()
+        await create_post(rpc, title="t", content="c", is_announcement=True, bypass_email=True)
+        kwargs = rpc.content_create.await_args.kwargs
+        assert kwargs["prof_override"] is True
+        assert kwargs["config"] == {"bypass_email": 1, "is_announcement": 1}
+
+    async def test_caller_config_wins_over_flags(self):
+        rpc = self._rpc()
+        await create_post(
+            rpc, title="t", content="c", bypass_email=True, config={"bypass_email": 0}
+        )
+        cfg = rpc.content_create.await_args.kwargs["config"]
+        assert cfg["bypass_email"] == 0
+
+    async def test_explicit_prof_override_kwarg_not_duplicated(self):
+        rpc = self._rpc()
+        await create_post(rpc, title="t", content="c", bypass_email=True)
+        # flag path owns the key exactly once
+        kwargs = rpc.content_create.await_args.kwargs
+        assert list(kwargs).count("prof_override") == 1
+
+
+# ---------------------------------------------------------------------------
 # Instructor follow-up (config.ionly)
 # ---------------------------------------------------------------------------
 

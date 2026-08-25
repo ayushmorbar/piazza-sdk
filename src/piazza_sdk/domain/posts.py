@@ -61,6 +61,24 @@ if TYPE_CHECKING:
     from piazza_sdk.models.post import PublishingOptions
 
 
+def _apply_reference_flags(
+    config: dict[str, Any], kwargs: dict[str, Any], *, is_announcement: bool, bypass_email: bool
+) -> None:
+    """Inject hfaran-parity post flags in place.
+
+    ``is_announcement`` becomes ``config.is_announcement = 1``;
+    ``bypass_email`` sets top-level ``kwargs["prof_override"] = True``
+    plus ``config.bypass_email = 1`` (reference wire contract).
+    ``setdefault`` keeps explicit caller config authoritative.
+    """
+    if is_announcement:
+        config.setdefault("is_announcement", 1)
+    if bypass_email:
+        config.setdefault("bypass_email", 1)
+        kwargs.pop("prof_override", None)  # this helper owns the key
+        kwargs["prof_override"] = True
+
+
 async def create_post(  # noqa: PLR0913
     rpc: RPC,
     *,
@@ -73,6 +91,8 @@ async def create_post(  # noqa: PLR0913
     folders: list[str] | None = None,
     private_to_staff: bool = False,
     author_uid: str | None = None,
+    is_announcement: bool = False,
+    bypass_email: bool = False,
     **kwargs: Any,
 ) -> PostCreatedResponse:
     """Create a new post.
@@ -96,6 +116,13 @@ async def create_post(  # noqa: PLR0913
             contract).
         author_uid: Pre-resolved author user ID; skips the profile
             round-trip when ``private_to_staff`` is set.
+        is_announcement: Flag the post as an announcement via
+            ``config.is_announcement = 1`` (hfaran parity). Keys are
+            omitted when unset; caller-supplied ``config`` keys win.
+        bypass_email: Suppress notification email for this post by
+            setting top-level ``prof_override = True`` plus
+            ``config.bypass_email = 1`` (hfaran wire contract).
+            Caller-supplied ``config`` keys win.
         **kwargs: Additional parameters.
 
     Returns:
@@ -130,6 +157,13 @@ async def create_post(  # noqa: PLR0913
             uid = str(candidate)
         nid = getattr(rpc, "network_id", "") or ""
         config["feed_groups"] = f"instr_{nid},{uid}"
+
+    # hfaran-parity flags: announcement via config key, email bypass via
+    # the prof_override escape hatch (reference contract). setdefault so
+    # explicit caller config always wins.
+    _apply_reference_flags(
+        config, kwargs, is_announcement=is_announcement, bypass_email=bypass_email
+    )
 
     extra = dict(kwargs)
     if options is not None:

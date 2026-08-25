@@ -49,7 +49,7 @@ from piazza_sdk.domain.users import get_instructor_stats as _domain_get_instruct
 from piazza_sdk.domain.users import get_online_users as _domain_get_online_users
 from piazza_sdk.exceptions import FeedError, NotFoundError, PiazzaSDKError, ValidationError
 from piazza_sdk.models.feed import Feed, FeedFilter, FeedItem, FolderFilter
-from piazza_sdk.models.network import HallOfFameItem, Statistics
+from piazza_sdk.models.network import HallOfFameItem, NetworkInfo, Statistics
 from piazza_sdk.models.post import AssetUploadResponse, Post, PostCreatedResponse, PublishingOptions
 
 if TYPE_CHECKING:
@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
     from piazza_sdk.api.rpc import RPC
     from piazza_sdk.auth import SessionStateManager
-    from piazza_sdk.models.enums import PostType
+    from piazza_sdk.models.enums import PostType, UserRole
     from piazza_sdk.models.user import User, UserPreferences
 
 _HOF_FIELDS = {"uid", "nr", "time", "text", "when"}
@@ -77,11 +77,67 @@ class Network:
         self._rpc = rpc
         self._nid = nid
         self._session = session
+        self._info_cache: NetworkInfo | None = None
 
     async def _ensure_session(self) -> None:
         """Refresh the session if expired."""
         if self._session is not None and self._session.needs_refresh:
             await self._session.refresh()
+
+    # ── Network info & capabilities ───────────────────────────────────
+
+    async def info(self, *, refresh: bool = False) -> NetworkInfo:
+        """Fetch (and cache) this network's info from ``user.status``.
+
+        The parsed result includes the per-role permission matrix under
+        ``config.roles`` for pre-flight capability checks via
+        :meth:`can`.
+
+        Args:
+            refresh: Bypass the cache and re-fetch.
+
+        Returns:
+            Parsed NetworkInfo model.
+
+        Raises:
+            NotFoundError: If this network is absent from user status.
+
+        Example:
+            ```python
+            # Example for info
+            res = await network.info()
+            ```
+        """
+        if self._info_cache is not None and not refresh:
+            return self._info_cache
+        await self._ensure_session()
+        from piazza_sdk.domain.network import get_network_info  # noqa: PLC0415
+
+        self._info_cache = await get_network_info(self._rpc, nid=self._nid)
+        return self._info_cache
+
+    async def can(self, role: UserRole | str, action: str) -> bool:
+        """Pre-flight capability check for a role/action pair.
+
+        Convenience over ``await network.info()`` →
+        ``NetworkInfo.can(role, action)``. Returns ``False`` when the
+        permission matrix is unavailable on the wire.
+
+        Args:
+            role: Role name (e.g. ``UserRole.STUDENT`` or "instructor").
+            action: Permission flag name (e.g. ``"new_post"``).
+
+        Returns:
+            True when the role is explicitly permitted the action.
+
+        Example:
+            ```python
+            # Example for can
+            res = await network.can()
+            ```
+        """
+        info = await self.info()
+        return info.can(role, action)
 
     # ── Feed ──────────────────────────────────────────────────────────
 

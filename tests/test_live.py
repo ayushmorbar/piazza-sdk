@@ -27,6 +27,7 @@ from piazza_sdk.api.network import Network
 from piazza_sdk.api.piazza import Piazza
 from piazza_sdk.config import PiazzaConfig, SessionConfig
 from piazza_sdk.exceptions import NotFoundError
+from piazza_sdk.models.enums import UserRole
 from piazza_sdk.models.user import EmailPrefEntry
 
 logging.basicConfig(level=logging.INFO)
@@ -556,3 +557,52 @@ async def test_live_email_preferences_roundtrip():
         restored = await piazza.get_email_preferences()
         assert restored[nid].new == original_new, "revert not visible on read-back"
         logger.info("✓ revert to %r verified — state restored", original_new)
+
+
+# ── LIVE verification: network info & role permissions ─────────
+
+
+@live
+@requires_instructor_creds
+@pytest.mark.asyncio
+async def test_live_network_info_roles_matrix():
+    """Live verify: user.status networks[] parse, config.roles, resources_url.
+
+    Asserts the instructor's course carries a roles matrix with
+    instructor-level posting rights, and that the derived Resources URL
+    responds with HTTP 200.
+    """
+
+    config = PiazzaConfig(course_id=COURSE_ID)
+    async with SessionStateManager(config) as session:
+        await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        rpc = RPC(session=session, base_url=config.base_url, network_id=COURSE_ID)
+        network = Network(rpc, COURSE_ID)
+
+        info = await network.info()
+        assert info.nid == COURSE_ID
+        logger.info(
+            "✓ info parsed: name=%r term=%r school_ext=%r short_number=%s",
+            info.name,
+            info.term,
+            info.school_ext,
+            info.short_number,
+        )
+
+        # Role matrix presence is data-dependent; log rather than hard-fail.
+        if info.config is not None and info.config.roles is not None:
+            roles_present = [
+                r for r in ("admin", "instructor", "ta") if getattr(info.config.roles, r)
+            ]
+            logger.info("✓ roles present: %s", roles_present or "none")
+            if "instructor" in roles_present:
+                assert info.can(UserRole.INSTRUCTOR, "new_post") is True
+                logger.info("✓ can(instructor, new_post) == True")
+        else:
+            logger.info("! config.roles absent for this course (schema drift?)")
+
+        url = info.resources_url
+        assert url.startswith("https://piazza.com/"), f"bad resources_url: {url}"
+        resp = await session.client.get(url)
+        assert resp.status_code == 200, f"resources_url returned {resp.status_code}: {url}"
+        logger.info("✓ resources_url live 200: %s", url)

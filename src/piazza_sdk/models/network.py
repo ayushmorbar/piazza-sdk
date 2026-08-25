@@ -2,7 +2,103 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from piazza_sdk.models.enums import UserRole
+
+
+class RolePermissions(BaseModel):
+    """Permission flags for one role within a network.
+
+    Mirrors the union of permission fields observed across the
+    ``admin``/``instructor``/``professor``/``student``/``ta`` entries of
+    ``user.status`` → ``networks[].config.roles``. Unknown fields are
+    tolerated (server-fed payload); unknown *actions* queried via
+    :meth:`NetworkInfo.can` resolve to ``False``.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    admin_roster: bool = Field(default=False, description="Can access the admin roster")
+    can_post_anonymous_all: bool = Field(
+        default=False, description="Can post anonymously to everyone"
+    )
+    can_post_anonymous_members: bool = Field(
+        default=False, description="Can post anonymously to class members"
+    )
+    expert_answer_create: bool = Field(default=False, description="Can create instructor answers")
+    expert_answer_edit: bool = Field(default=False, description="Can edit instructor answers")
+    expert_answer_endorse: bool = Field(default=False, description="Can endorse instructor answers")
+    followup_edit: bool = Field(default=False, description="Can edit follow-ups")
+    manage_folders: bool = Field(default=False, description="Can manage folders")
+    manage_group_info: bool = Field(default=False, description="Can manage group info")
+    manage_groups: bool = Field(default=False, description="Can manage groups")
+    manage_resources: bool = Field(default=False, description="Can manage course resources")
+    member_answer_create: bool = Field(default=False, description="Can create student answers")
+    member_answer_edit: bool = Field(default=False, description="Can edit student answers")
+    member_answer_endorse: bool = Field(default=False, description="Can endorse student answers")
+    member_roster: bool = Field(default=False, description="Can access the member roster")
+    new_followup: bool = Field(default=False, description="Can create follow-ups")
+    new_post: bool = Field(default=False, description="Can create posts")
+    question_delete: bool = Field(default=False, description="Can delete questions")
+    question_edit: bool = Field(default=False, description="Can edit questions")
+
+
+class NetworkRoles(BaseModel):
+    """Per-role permission matrix from ``config.roles``.
+
+    Attributes:
+        admin: Permissions for network admins, or None when absent.
+        instructor: Permissions for instructors, or None when absent.
+        professor: Permissions for professors, or None when absent.
+        student: Permissions for students, or None when absent.
+        ta: Permissions for TAs, or None when absent.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    admin: RolePermissions | None = None
+    instructor: RolePermissions | None = None
+    professor: RolePermissions | None = None
+    student: RolePermissions | None = None
+    ta: RolePermissions | None = None
+
+
+class ClassSections(BaseModel):
+    """Class section enrollment config from ``config.class_sections``."""
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    allow_enroll: int = Field(default=0, description="Whether self-enrollment is allowed")
+    sections: list[str] = Field(default_factory=list, description="Section names")
+
+
+class NetworkConfig(BaseModel):
+    """Network-level configuration from ``user.status`` → ``networks[].config``.
+
+    Server-fed model: unknown keys are ignored so upstream additions do
+    not break parsing.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    roles: NetworkRoles | None = Field(default=None, description="Per-role permission matrix")
+    class_sections: ClassSections | None = Field(
+        default=None, description="Class section enrollment config"
+    )
+    default_posts_to_private: bool | None = Field(
+        default=None, description="Whether new posts default to private visibility"
+    )
+    disable_folders: bool | None = Field(default=None, description="Whether folders are disabled")
+    disable_student_polls: bool | None = Field(
+        default=None, description="Whether student polls are disabled"
+    )
+    public_visibility_settings: dict[str, Any] | None = Field(
+        default=None, description="Public visibility configuration"
+    )
 
 
 class NetworkInfo(BaseModel):
@@ -22,9 +118,14 @@ class NetworkInfo(BaseModel):
         folders: List of folder names available in the network.
         instructors: List of instructor names.
         status: Network status string (e.g. "active"), or None.
+        school_ext: School extension slug used in resource URLs.
+        short_number: Short course number used in resource URLs.
+        anonymity: Anonymity policy string for the network.
+        auto_join: Auto-join policy string for the network.
+        config: Parsed network configuration incl. role permissions.
     """
 
-    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
 
     id: str = Field(default="", description="Piazza network identifier (numeric string)")
     nid: str = Field(default="", description="Network ID used in API URLs")
@@ -41,6 +142,53 @@ class NetworkInfo(BaseModel):
     )
     instructors: list[str] = Field(default_factory=list, description="Instructor names")
     status: str | None = Field(default=None, description="Network status string (e.g. active)")
+    school_ext: str = Field(default="", description="School extension slug for resource URLs")
+    short_number: str = Field(default="", description="Short course number for resource URLs")
+    anonymity: str = Field(default="", description="Anonymity policy string")
+    auto_join: str = Field(default="", description="Auto-join policy string")
+    config: NetworkConfig | None = Field(
+        default=None, description="Parsed network configuration with role permissions"
+    )
+
+    @property
+    def resources_url(self) -> str:
+        """Build the web Resources page URL for this course.
+
+        Mirrors the reference client's URL shape:
+        ``https://piazza.com/{school_ext}/{term}/{short_number}/home``
+        where *term* is lower-cased without spaces.
+
+        Returns an empty string when the required slugs are missing
+        (e.g. the entry came from ``all_classes`` rather than
+        ``user.status``).
+        """
+        if not self.school_ext or not self.short_number:
+            return ""
+        term = self.term.lower().replace(" ", "")
+        return f"https://piazza.com/{self.school_ext}/{term}/{self.short_number}/home"
+
+    def can(self, role: UserRole | str, action: str) -> bool:
+        """Check whether *role* is permitted *action* in this network.
+
+        Pre-flight capability check backed by the parsed
+        ``config.roles`` permission matrix. Returns ``False`` (never
+        raises) when the matrix is absent, the role is unknown, or the
+        action is outside the modeled permission set.
+
+        Args:
+            role: Role name (e.g. ``UserRole.STUDENT`` or "instructor").
+            action: Permission flag name (e.g. ``"new_post"``).
+
+        Returns:
+            True when the permission flag is explicitly set for the role.
+        """
+        roles = self.config.roles if self.config is not None else None
+        if roles is None:
+            return False
+        perms: RolePermissions | None = getattr(roles, str(role).lower(), None)
+        if perms is None:
+            return False
+        return bool(getattr(perms, action, False))
 
 
 class StatisticsStudents(BaseModel):

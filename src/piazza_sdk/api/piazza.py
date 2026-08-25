@@ -100,6 +100,9 @@ class Piazza:
         ``/user/api/get_user_classes`` REST path returns HTTP 404 on the
         current Piazza API (verified live 2026-08).
 
+        Enriches each class dict with an ``is_ta`` boolean derived from
+        the user's ``prof_hash`` in ``user.status``.
+
         Automatically restores the session if expired.
 
         Returns:
@@ -114,6 +117,12 @@ class Piazza:
         """
         if self._session.needs_refresh:
             await self._session.refresh()
+        entries = await self._fetch_class_entries()
+        await self._enrich_is_ta(entries)
+        return entries
+
+    async def _fetch_class_entries(self) -> list[dict[str, Any]]:
+        """Fetch raw class entries from user profile."""
         try:
             profile = await self._get_user_rpc().get_user_profile()
         except PiazzaSDKError:
@@ -126,8 +135,13 @@ class Piazza:
             if isinstance(profile, dict)
             else []
         )
+        return self._parse_class_entries(raw_classes)
+
+    @staticmethod
+    def _parse_class_entries(raw_classes: Any) -> list[dict[str, Any]]:
+        """Parse raw classes dict or list into a list of dicts with nid keys."""
         if isinstance(raw_classes, dict):
-            entries: list[Any] = []
+            entries: list[dict[str, Any]] = []
             for nid, value in raw_classes.items():
                 if isinstance(value, dict):
                     item = dict(value)
@@ -137,6 +151,31 @@ class Piazza:
         if isinstance(raw_classes, list):
             return [item for item in raw_classes if isinstance(item, dict)]
         return []
+
+    async def _enrich_is_ta(self, entries: list[dict[str, Any]]) -> None:
+        """Set ``is_ta`` on each class entry from user.status prof_hash."""
+        try:
+            status = await self.get_user_status()
+        except PiazzaSDKError:
+            return
+        uid = str(status.get("id", ""))
+        prof_map = self._build_prof_map(status.get("networks", []))
+        for entry in entries:
+            nid = str(entry.get("nid", ""))
+            entry["is_ta"] = uid != "" and uid in prof_map.get(nid, {})
+
+    @staticmethod
+    def _build_prof_map(networks: Any) -> dict[str, dict[str, Any]]:
+        """Map network IDs to their ``prof_hash`` dicts."""
+        prof_map: dict[str, dict[str, Any]] = {}
+        if not isinstance(networks, list):
+            return prof_map
+        for net in networks:
+            if isinstance(net, dict):
+                nid = str(net.get("id", ""))
+                if nid:
+                    prof_map[nid] = net.get("prof_hash", {})
+        return prof_map
 
     async def get_user_profile(self) -> dict[str, Any]:
         """Get the current user's profile via JSON-RPC.

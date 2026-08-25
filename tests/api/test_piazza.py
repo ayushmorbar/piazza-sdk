@@ -8,6 +8,7 @@ import pytest
 
 from piazza_sdk.api.network import Network
 from piazza_sdk.api.piazza import Piazza
+from piazza_sdk.exceptions import PiazzaSDKError
 from piazza_sdk.models.user import EmailPrefEntry
 
 
@@ -46,6 +47,16 @@ class TestPiazzaUserClassesAndProfile:
                 "networks": [{"id": "c1", "name": "Class 1"}, {"id": "c2", "name": "Class 2"}],
             }
         )
+        # Mock user_status to return matching networks with prof_hash
+        mock_rpc.user_status = AsyncMock(
+            return_value={
+                "id": "uid_123",
+                "networks": [
+                    {"id": "c1", "prof_hash": {"uid_123": {}}},
+                    {"id": "c2", "prof_hash": {}},
+                ],
+            }
+        )
         piazza = Piazza(mock_session)
         piazza._user_rpc = mock_rpc
 
@@ -53,6 +64,59 @@ class TestPiazzaUserClassesAndProfile:
         assert len(classes) == 2
         assert classes[0]["id"] == "c1"
         assert classes[1]["name"] == "Class 2"
+
+    @pytest.mark.asyncio
+    async def test_get_user_classes_is_ta_true(self, mock_session):
+        """is_ta is True when user ID is in prof_hash."""
+        mock_rpc = MagicMock()
+        mock_rpc.get_user_profile = AsyncMock(
+            return_value={"all_classes": {"n1": {"name": "CS 101"}, "n2": {"name": "CS 202"}}}
+        )
+        mock_rpc.user_status = AsyncMock(
+            return_value={
+                "id": "uid_ta",
+                "networks": [
+                    {"id": "n1", "prof_hash": {"uid_ta": {}, "uid_other": {}}},
+                    {"id": "n2", "prof_hash": {"uid_other": {}}},
+                ],
+            }
+        )
+        piazza = Piazza(mock_session)
+        piazza._user_rpc = mock_rpc
+
+        classes = await piazza.get_user_classes()
+        assert classes[0]["is_ta"] is True
+        assert classes[1]["is_ta"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_user_classes_is_ta_false_no_prof_hash(self, mock_session):
+        """is_ta defaults to False when prof_hash is absent."""
+        mock_rpc = MagicMock()
+        mock_rpc.get_user_profile = AsyncMock(
+            return_value={"all_classes": {"n1": {"name": "CS 101"}}}
+        )
+        mock_rpc.user_status = AsyncMock(return_value={"id": "uid_1", "networks": [{"id": "n1"}]})
+        piazza = Piazza(mock_session)
+        piazza._user_rpc = mock_rpc
+
+        classes = await piazza.get_user_classes()
+        assert classes[0]["is_ta"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_user_classes_is_ta_skipped_on_error(self, mock_session):
+        """is_ta enrichment is skipped gracefully when user.status fails."""
+        mock_rpc = MagicMock()
+        mock_rpc.get_user_profile = AsyncMock(
+            return_value={"all_classes": {"n1": {"name": "CS 101"}}}
+        )
+        mock_rpc.user_status = AsyncMock(side_effect=PiazzaSDKError("fail"))
+        piazza = Piazza(mock_session)
+        piazza._user_rpc = mock_rpc
+
+        classes = await piazza.get_user_classes()
+        assert len(classes) == 1
+        # is_ta should not be present when enrichment is skipped
+        assert "is_ta" not in classes[0]
 
 
 class TestPiazzaGlobalDelegations:

@@ -78,6 +78,38 @@ class CookieJar(BaseModel):
         """Serialize cookies to a Cookie header string."""
         return "; ".join(f"{k}={v}" for k, v in self.cookies.items())
 
+    def export_dict(self) -> dict[str, str]:
+        """Export all cookies as a plain name→value dictionary.
+
+        Returns:
+            Defensive copy of the cookie mapping (safe to mutate or
+            hand to ``requests``-style sessions / browser tooling).
+        """
+        return dict(self.cookies)
+
+    def import_dict(self, cookies: dict[str, str]) -> int:
+        """Import cookies from a plain name→value dictionary.
+
+        Mirrors the reference client's ``set_cookies`` convenience for
+        hand-off from browsers or other HTTP libraries.
+
+        Args:
+            cookies: Mapping of cookie names to values. Empty names or
+                non-string values are skipped.
+
+        Returns:
+            Number of cookies actually imported.
+        """
+        count = 0
+        for name, value in cookies.items():
+            if not isinstance(name, str) or not name.strip():
+                continue
+            if not isinstance(value, str) or not value.strip():
+                continue
+            self.cookies[name] = value
+            count += 1
+        return count
+
     def update_from_header(self, header: str) -> int:
         """Parse a Set-Cookie style header and update the jar.
 

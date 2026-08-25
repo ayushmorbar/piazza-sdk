@@ -53,6 +53,43 @@ class TestCookieJarHeaderManipulation:
         assert jar.to_header() == ""
 
 
+class TestCookieJarDictImportExport:
+    """Plain-dict cookie hand-off (reference-client get/set_cookies parity)."""
+
+    def test_export_returns_defensive_copy(self):
+        jar = CookieJar()
+        jar.set("session", "abc")
+        exported = jar.export_dict()
+        exported["session"] = "MUTATED"
+        assert jar.cookies["session"] == "abc"
+        assert jar.export_dict() == {"session": "abc"}
+
+    def test_import_round_trip(self):
+        jar = CookieJar()
+        source = {"session_id": "s1", "_piazza_s": "p1"}
+        count = jar.import_dict(source)
+        assert count == 2
+        assert jar.export_dict() == source
+
+    def test_import_skips_blank_and_non_string(self):
+        jar = CookieJar()
+        count = jar.import_dict(
+            {
+                "good": "v",
+                "blank_name": "",
+                "": "orphan",
+                "num": 5,  # type: ignore[dict-item]
+            }
+        )
+        assert count == 1
+        assert jar.cookies == {"good": "v"}
+
+    def test_import_does_not_touch_csrf_token(self):
+        jar = CookieJar(csrf_token="keep-me")
+        jar.import_dict({"a": "1"})
+        assert jar.csrf_token == "keep-me"
+
+
 class TestCookieJarStorageAndEncryption:
     """Verify CookieJar serialization to disk (plaintext and Fernet encrypted)."""
 

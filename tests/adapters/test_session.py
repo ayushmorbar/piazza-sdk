@@ -257,3 +257,41 @@ class TestLoginErrorSurfacing:
         with pytest.raises(AuthenticationError, match="Incorrect email or password"):
             await mgr.login("a@b.com", "wrong")
         assert mgr._state == SessionState.UNAUTHENTICATED
+
+
+# ---------------------------------------------------------------------------
+# Plain-dict cookie export/import on the session facade
+# ---------------------------------------------------------------------------
+
+
+class TestSessionCookieDictFacade:
+    """export_cookies/import_cookies hand-off with live-client re-application."""
+
+    def test_export_defensive_copy(self):
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        mgr._cookies.set("session", "abc")
+        exported = mgr.export_cookies()
+        exported["session"] = "MUTATED"
+        assert mgr.export_cookies() == {"session": "abc"}
+
+    def test_import_applies_to_live_client_when_active(self):
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        mgr._client = httpx.AsyncClient()
+        count = mgr.import_cookies({"session_id": "s9", "_piazza_s": "p9"})
+        assert count == 2
+        assert mgr._client.cookies.get("session_id") == "s9"
+
+    def test_import_lands_in_jar_and_adopts_session(self):
+        """Importing cookies transitions UNAUTHENTICATED -> AUTHENTICATED."""
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        assert mgr._state == SessionState.UNAUTHENTICATED
+        count = mgr.import_cookies({"session_id": "s1"})
+        assert count == 1
+        assert mgr._cookies.get("session_id") == "s1"
+        assert mgr._state == SessionState.AUTHENTICATED
+
+    def test_closed_session_not_adopted_by_import(self):
+        mgr = SessionStateManager(PiazzaConfig(course_id="c1"))
+        mgr._state = SessionState.CLOSED
+        mgr.import_cookies({"session_id": "s1"})
+        assert mgr._state == SessionState.CLOSED

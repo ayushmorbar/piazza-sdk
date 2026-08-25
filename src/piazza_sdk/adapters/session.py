@@ -403,6 +403,49 @@ class SessionStateManager:
         """
         await self.close()
 
+    def export_cookies(self) -> dict[str, str]:
+        """Export session cookies as a plain name→value dictionary.
+
+        Convenience for hand-off to browsers, ``requests.Session``, or
+        any other HTTP tooling (reference-client ``get_cookies`` parity).
+
+        Returns:
+            Defensive copy of the cookie mapping.
+        """
+        return self._cookies.export_dict()
+
+    def import_cookies(self, cookies: dict[str, str]) -> int:
+        """Import cookies from a plain name→value dictionary.
+
+        Mirrors the reference client's ``set_cookies``: lands in the
+        persistent jar immediately, and when the session is ACTIVE the
+        values are also re-applied to the live ``httpx`` client so the
+        very next request carries them. The persisted CSRF token (if
+        present on an active session) is re-attached as a header too.
+
+        Adopting an externally supplied session transitions an
+        UNAUTHENTICATED manager to AUTHENTICATED (same semantics as
+        :meth:`restore_cookies`); verify liveness afterwards with
+        :meth:`is_session_alive`. Note that JSON-RPC POSTs additionally
+        require the CSRF token header — re-login or supply one when the
+        imported cookies originate outside this SDK.
+
+        Args:
+            cookies: Mapping of cookie names to values.
+
+        Returns:
+            Number of cookies actually imported.
+        """
+        count = self._cookies.import_dict(cookies)
+        if self._client is not None:
+            for name, value in self._cookies.cookies.items():
+                self._client.cookies.set(name, value)
+            if self._cookies.csrf_token:
+                self._client.headers["csrf-token"] = self._cookies.csrf_token
+        if count and self._state == SessionState.UNAUTHENTICATED:
+            self._state = SessionState.AUTHENTICATED
+        return count
+
     def get_auth_headers(self) -> dict[str, str]:
         """Return headers required for authenticated API requests.
 

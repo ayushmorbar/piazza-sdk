@@ -319,7 +319,9 @@ async def delete_post(
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
     try:
-        raw = await rpc.content_delete(post_id)
+        # Annotated ``Any`` so the defensive isinstance below survives strict
+        # type checking — mocked/alternative transports may return non-dicts.
+        raw: Any = await rpc.content_delete(post_id)
         # Verified live: content.delete returns an empty dict on success
         # (no {"result": "success"} wrapper). Success = no embedded error
         # AND no explicitly failed result value.
@@ -436,7 +438,9 @@ async def resolve_post(
         raise ValidationError("post_id must be non-empty")
     post_data: dict[str, Any] = {}
     if hasattr(rpc, "content_get"):
-        res = rpc.content_get(post_id)
+        # Annotated ``Any``: duck-typed RPCs (mocks, alternate transports) may
+        # return a bare dict instead of a coroutine.
+        res: Any = rpc.content_get(post_id)
         if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
             post_data = await res
         elif isinstance(res, dict):
@@ -448,7 +452,7 @@ async def resolve_post(
     subject = first_hist.get("subject", post_data.get("subject", ""))
     content = first_hist.get("content", post_data.get("content", ""))
     folders = post_data.get("folders", ["other"])
-    raw = await rpc.content_update(
+    raw: Any = await rpc.content_update(
         cid=post_id,
         subject=subject,
         content=content,

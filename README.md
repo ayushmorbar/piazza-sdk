@@ -44,7 +44,7 @@ async def main():
     config = SessionConfig(user_agent="my-app/1.0")
     async with SessionStateManager(config) as session:
         await session.login(email="your@email.com", password="your_password")
-        
+
         piazza = Piazza(session)
         classes = await piazza.get_user_classes()
         network = piazza.network(classes[0]["nid"])

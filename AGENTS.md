@@ -5,8 +5,11 @@ Instructions for coding agents working on this repository. For Claude-specific g
 ## Setup
 
 ```bash
-pip install -e ".[dev]"
+uv sync            # creates .venv, installs locked dev deps (PEP 735 group)
+pre-commit install # optional: local lint hooks
 ```
+
+Use `uv run <cmd>` for all tool invocations so the locked environment is used.
 
 ## Project Overview
 
@@ -111,9 +114,10 @@ unknown methods surface as embedded errors normalized to `NotFoundError`.
 ## Before Committing
 
 ```bash
-ruff check src/ tests/
-mypy src/
-pytest tests/ -v
+uv run ruff check src/ tests/
+uv run ruff format --check src/ tests/
+uv run mypy src/          # strict profile
+uv run pytest --cov=piazza_sdk   # coverage gate enforced (fail_under in pyproject)
 ```
 
-All three must pass cleanly.
+All four must pass cleanly. Raise `fail_under` when coverage improves; never lower it.

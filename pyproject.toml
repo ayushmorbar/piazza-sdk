@@ -37,7 +37,15 @@ dependencies = [
     "tenacity>=8.3.0",
 ]
 
+# Higher-fidelity HTML→Markdown conversion (SDK falls back to stdlib without it)
 [project.optional-dependencies]
+normalization = [
+    "html2text>=2025.4.15",
+]
+
+# PEP 735 dependency groups — development-only deps managed by uv.
+# These are NOT published as package extras; use `uv sync --group <name>`.
+[dependency-groups]
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
@@ -45,16 +53,16 @@ dev = [
     "ruff>=0.5.0",
     "mypy>=1.10.0",
     "pre-commit>=3.7.0",
+    "pip-audit>=2.7.0",
 ]
 docs = [
     "mkdocs>=1.5.0",
     "mkdocstrings[python]>=0.26.0",
     "mkdocs-material>=9.5.0",
 ]
-# Higher-fidelity HTML→Markdown conversion (SDK falls back to stdlib without it)
-normalization = [
-    "html2text>=2024.2.26",
-]
+
+[tool.uv]
+default-groups = ["dev"]
 
 [project.urls]
 Homepage = "https://github.com/ayushmorbar/piazza-sdk"
@@ -82,7 +90,7 @@ line-length = 100
 select = [
     "E", "F", "I", "UP", "W", "C90", "ANN", "ARG", "BLE", "COM", "DTZ",
     "EXE", "FA", "ISC", "ICN", "LOG", "N", "PD", "PIE", "PL", "PTH",
-    "PT", "Q", "RSE", "RET", "SIM", "T20", "TCH", "TID", "TRY",
+    "PT", "Q", "RSE", "RET", "S", "SIM", "T20", "TCH", "TID", "TRY",
 ]
 ignore = [
     "ANN001", "ANN002", "ANN003",
@@ -94,8 +102,9 @@ ignore = [
     "TRY003", "TRY300", "TRY301",
     "PTH111",
 ]
-per-file-ignores."tests/*" = ["S101", "SLF001", "ANN201", "DTZ005"]
-per-file-ignores."example.py" = ["T201", "ANN201"]
+per-file-ignores."tests/*" = ["S101", "S105", "S106", "SLF001", "ANN201", "DTZ005"]
+per-file-ignores."example.py" = ["S106", "T201", "ANN201"]
+per-file-ignores."docs/_tutorials/*" = ["S106"]
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false
@@ -107,13 +116,9 @@ skip-magic-trailing-comma = true
 
 [tool.mypy]
 python_version = "3.11"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-no_implicit_optional = true
-strict_equality = true
+strict = true
+warn_unreachable = true
+warn_redundant_casts = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -131,6 +136,8 @@ source = ["src/piazza_sdk"]
 branch = true
 
 [tool.coverage.report]
+# Ratchet policy: raise by ~5% per release toward an 85% target.
+fail_under = 68
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

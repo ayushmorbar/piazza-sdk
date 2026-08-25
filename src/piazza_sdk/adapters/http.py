@@ -107,7 +107,8 @@ def _compute_retry_wait(retry_state: RetryCallState) -> float:
     if isinstance(outcome_exc, RateLimitError) and outcome_exc.retry_after_ms:
         return min(float(outcome_exc.retry_after_ms) / 1000.0, _RATE_LIMIT_MAX_WAIT_S)
     delay = _RETRY_BASE_DELAY_S * (2 ** max(retry_state.attempt_number - 1, 0))
-    jitter = random.uniform(0, _RETRY_BASE_DELAY_S)
+    # Non-cryptographic use: jitter only spaces out retries; no security sensitivity.
+    jitter = random.uniform(0, _RETRY_BASE_DELAY_S)  # noqa: S311
     return float(min(delay + jitter, _RETRY_MAX_WAIT_S))
 
 
@@ -216,7 +217,8 @@ class RPC:
             self._last_request_time = now
             return
 
-        delay = random.uniform(self._throttle_min_delay, self._throttle_max_delay)
+        # Non-cryptographic use: randomizes pacing between requests; no security sensitivity.
+        delay = random.uniform(self._throttle_min_delay, self._throttle_max_delay)  # noqa: S311
         remaining = delay - elapsed
         if remaining > 0:
             logger.debug(

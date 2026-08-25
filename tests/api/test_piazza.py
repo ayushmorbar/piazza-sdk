@@ -70,7 +70,7 @@ class TestPiazzaGlobalDelegations:
     @pytest.mark.asyncio
     async def test_get_unread_message_count(self, mock_session):
         mock_rpc = MagicMock()
-        mock_rpc.memo_get_unread_message_count = AsyncMock(return_value=3)
+        mock_rpc.get_unread_message_count = AsyncMock(return_value=3)
         piazza = Piazza(mock_session)
         piazza._user_rpc = mock_rpc
 

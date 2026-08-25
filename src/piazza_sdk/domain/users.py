@@ -163,9 +163,16 @@ async def get_my_events_info(
 
 
 async def get_unread_message_count(rpc: RPC, *, session: SessionStateManager | None = None) -> int:
-    raw = await rpc.memo_get_unread_message_count()
-    if isinstance(raw, int):
-        return raw
-    if isinstance(raw, dict):
-        return int(raw.get("count", 0))
-    return 0
+    """Get the count of unread direct messages for the current user.
+
+    Delegates to :meth:`RPC.get_unread_message_count`, which normalizes the
+    raw heartbeat payload (dict, scalar, or unexpected shapes) into ``int``.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager for automatic refresh.
+
+    Returns:
+        Integer count of unread messages.
+    """
+    return await rpc.get_unread_message_count()

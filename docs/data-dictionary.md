@@ -1021,6 +1021,11 @@ When code and this table disagree, trust the table and file a bug.
 | **Nested payloads** | Real posts carry config keys beyond the model surface (e.g. `config.feed_groups`). Server-fed nested models (`PostConfig`, `Answer`, `PostRevision`) therefore ignore unknown keys instead of rejecting them. |
 | **Retries** | 429 and 5xx responses ARE retried (exponential backoff honoring `Retry-After`); typed exceptions survive retries via reraise, preserving `retry_after_ms` / `status_code`. |
 | **Feed** | `network.get_my_feed` result includes `total`; Hall-of-Fame data lives at `result.hof.best_answer` after single envelope unwrap. |
+| **Global email prefs** | `user.status` exposes `config.email_prefs` keyed by network ID plus a non-course `career` key; entries carry `auto_follow` as **bool-or-string**, `new`, `updates`, `no_events`, `throttle`. Writes go through global `user.update` with the full map (`{"email_prefs": {...}}`) — no nid/aid injection; partial per-entry merges must write back the whole preserved map. Flip/revert verified with live read-back. |
+| **Role matrix** | `user.status` → `networks[].config.roles` carries all five roles (admin/instructor/professor/student/ta); student additionally includes `can_post_anonymous_all`. Unknown keys tolerated via server-fed models. |
+| **Resources URL** | `https://piazza.com/{school_ext}/{term-lowercase-nospace}/{short_number}/home` responds HTTP 200 when slugs are present on the network entry. |
+| **Child payloads** | Children in `content.get` carry **no `history`** and usually no flat `content`; follow-up text lives in `subject`. Tree walks fall back history → content → subject. |
+| **Network-scoped params** | `content.bookmark/unbookmark/mark_favorite/mark_unfavorite/view/cancel_edit/remove_feedback/del_item/get_users` accept (and bookmark round-trips with) normalized `nid` + `aid` params; verified via live bookmark→read-back→unbookmark cycle. |
 
 
 ---

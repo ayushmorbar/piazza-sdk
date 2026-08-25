@@ -228,12 +228,14 @@ async def test_dual_role_complete_lifecycle():  # noqa: PLR0915
     6. Instructor answers post (instructor answer)
     7. Instructor endorses post and removes endorsement
     8. Instructor pins and unpins post
-    9. Instructor locks post
-    10. Instructor resolves post (with full metadata update)
-    11. Instructor adds tag
-    12. Instructor cancels draft edit
-    13. Instructor checks updated post state
-    14. Instructor deletes post to ensure clean network
+    9. Instructor resolves post (with full metadata update)
+    10. Instructor locks post
+    11. Instructor unlocks, then unresolves post (verifies unresolve_post feature)
+    12. Instructor re-resolves and locks post
+    13. Instructor adds tag
+    14. Instructor cancels draft edit
+    15. Instructor checks updated post state (including is_upvoted property)
+    16. Instructor deletes post to ensure clean network
     """
     post_id: str | None = None
     followup_id: str | None = None
@@ -318,37 +320,45 @@ async def test_dual_role_complete_lifecycle():  # noqa: PLR0915
             await instructor_network.unpin_post(post_id)
             logger.info("✓ [Instructor] Pin & Unpin post OK")
 
-            # 9. Resolve Post (before lock — Piazza rejects resolving locked posts)
+            # 9. Resolve Post
             resolved = await instructor_network.resolve_post(post_id)
             assert resolved
             logger.info("✓ [Instructor] Resolve post OK")
 
-            # 10. Lock Post
-            await instructor_network.lock_post(post_id)
-            logger.info("✓ [Instructor] Lock post OK")
+            # 10. Unresolve Post (verifies new unresolve_post feature — before lock)
+            unresolved = await instructor_network.unresolve_post(post_id)
+            assert unresolved
+            logger.info("✓ [Instructor] Unresolve post OK (verifies unresolve_post feature)")
 
-            # 11. Add Tag
+            # 11. Re-resolve and Lock Post
+            await instructor_network.resolve_post(post_id)
+            await instructor_network.lock_post(post_id)
+            logger.info("✓ [Instructor] Re-resolve and lock OK")
+
+            # 12. Add Tag
             await instructor_network.add_tag(post_id, "test_tag")
             logger.info("✓ [Instructor] Add Tag OK")
 
-            # 12. Cancel Edit
+            # 13. Cancel Edit
             await instructor_network.cancel_edit()
             logger.info("✓ [Instructor] Cancel Edit OK")
 
-            # 13. Verify updated post state
+            # 14. Verify updated post state (including is_upvoted property)
             updated_post = await instructor_network.get_post(post_id)
             assert updated_post.id == post_id
             assert len(updated_post.children) >= 2
             answers = [c for c in updated_post.children if c.type in ("i_answer", "s_answer")]
             assert len(answers) >= 1
+            assert isinstance(updated_post.is_upvoted, bool)
             logger.info(
-                "✓ [Instructor] Post verified with %d children (%d answers)",
+                "✓ [Instructor] Post verified: %d children, %d answers, is_upvoted=%s",
                 len(updated_post.children),
                 len(answers),
+                updated_post.is_upvoted,
             )
 
         finally:
-            # 14. Clean up post
+            # 16. Clean up post
             if post_id:
                 await instructor_network.delete_post(post_id)
                 logger.info("✓ [Instructor] Cleaned up test post %s via delete_post", post_id)

@@ -37,6 +37,7 @@ from piazza_sdk.domain.posts import remove_tag as _domain_remove_tag
 from piazza_sdk.domain.posts import resolve_post as _domain_resolve_post
 from piazza_sdk.domain.posts import save_draft as _domain_save_draft
 from piazza_sdk.domain.posts import unpin_post as _domain_unpin_post
+from piazza_sdk.domain.posts import unresolve_post as _domain_unresolve_post
 from piazza_sdk.domain.posts import upload_asset as _domain_upload_asset
 from piazza_sdk.domain.preferences import get_preferences as _domain_get_preferences
 from piazza_sdk.domain.preferences import update_preferences as _domain_update_preferences
@@ -430,12 +431,52 @@ class Network:
 
         Example:
             ```python
-            # Example for resolve_post
-            res = await network.resolve_post(post_id='...')
+            from piazza_sdk import SessionStateManager
+
+            async with SessionStateManager(network_id="xxxxx") as session:
+                network = session.network
+
+                # Mark a question as resolved after answering:
+                success = await network.resolve_post(post_id="cl7k3x2f5")
+                assert success is True
             ```
         """
         await self._ensure_session()
         return await _domain_resolve_post(self._rpc, post_id=post_id)
+
+    async def unresolve_post(self, post_id: str) -> bool:
+        """Mark a resolved post as active (unresolve).
+
+        Reopens a previously resolved question so that students and
+        instructors can post new replies and follow-ups.
+
+        Args:
+            post_id: The post's unique identifier.
+
+        Returns:
+            True if the operation succeeded.
+
+        Raises:
+            ValidationError: If post_id is empty.
+
+        Example:
+            ```python
+            from piazza_sdk import SessionStateManager
+
+            async with SessionStateManager(network_id="xxxxx") as session:
+                network = session.network
+
+                # Reopen a resolved post for further discussion:
+                success = await network.unresolve_post(post_id="cl7k3x2f5")
+                assert success is True
+
+                # Verify the status changed:
+                post = await network.get_post("cl7k3x2f5")
+                assert post.status == "active"
+            ```
+        """
+        await self._ensure_session()
+        return await _domain_unresolve_post(self._rpc, post_id=post_id)
 
     async def answer_post(  # noqa: PLR0913
         self,

@@ -466,11 +466,32 @@ class RPC:
         )
 
     async def content_mark_resolved(self, post_id: str, resolved: bool = True) -> dict[str, Any]:
-        """Mark a post as resolved using content.mark_resolved.
+        """Mark a post as resolved or unresolved using content.mark_resolved.
+
+        Warning:
+            This endpoint is for **follow-up/comment resolution only**.
+            For post-level status changes, use :meth:`content_update` with
+            ``status="resolved"`` or ``status="active"`` instead — the
+            dedicated ``content.mark_resolved`` can return *Invalid content*
+            on some live API payloads.
+
+        Args:
+            post_id: The comment/follow-up ID to mark resolved.
+            resolved: ``True`` to mark resolved, ``False`` to unresolve.
+
+        Returns:
+            Raw API response dict.
+
+        Raises:
+            ContentError: If the API call fails.
+
         Example:
             ```python
-            # Example for content_mark_resolved
-            res = await content_mark_resolved(post_id='...', resolved='...')
+            from piazza_sdk.adapters.http import RPC
+
+            async def resolve_comment(rpc: RPC, comment_id: str) -> dict:
+                \"\"\"Resolve a follow-up comment on a post.\"\"\"
+                return await rpc.content_mark_resolved(comment_id, resolved=True)
             ```
         """
         payload = {
@@ -517,11 +538,32 @@ class RPC:
         )
 
     async def content_resolve(self, post_id: str) -> dict[str, Any]:
-        """Mark a post as resolved.
+        """Mark a post as resolved via content.mark_resolved.
+
+        Convenience wrapper around :meth:`content_mark_resolved` with
+        ``resolved=True``.
+
+        Warning:
+            For post-level status changes, prefer :meth:`content_update`
+            with ``status="resolved"`` which is more reliable on the live API.
+            This RPC method can return *Invalid content* on certain payloads.
+
+        Args:
+            post_id: The post/comment ID to resolve.
+
+        Returns:
+            Raw API response dict.
+
+        Raises:
+            ContentError: If the API call fails.
+
         Example:
             ```python
-            # Example for content_resolve
-            res = await content_resolve(post_id='...')
+            from piazza_sdk.adapters.http import RPC
+
+            async def quick_resolve(rpc: RPC, post_id: str) -> dict:
+                \"\"\"Resolve a post using the legacy RPC endpoint.\"\"\"
+                return await rpc.content_resolve(post_id)
             ```
         """
         payload = {

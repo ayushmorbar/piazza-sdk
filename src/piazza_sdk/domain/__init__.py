@@ -20,6 +20,7 @@ from piazza_sdk.domain.posts import (
     remove_tag,
     resolve_post,
     save_draft,
+    unresolve_post,
     upload_asset,
 )
 from piazza_sdk.domain.preferences import get_preferences, update_preferences
@@ -47,6 +48,7 @@ __all__ = [
     "resolve_post",
     "save_draft",
     "search",
+    "unresolve_post",
     "update_preferences",
     "upload_asset",
 ]

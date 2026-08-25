@@ -59,6 +59,11 @@ class TestNetworkInputValidation:
             await network.resolve_post("")
 
     @pytest.mark.asyncio
+    async def test_unresolve_post_empty_id(self, network):
+        with pytest.raises(ValidationError, match="post_id must be non-empty"):
+            await network.unresolve_post("")
+
+    @pytest.mark.asyncio
     async def test_valid_search_does_not_raise(self, network):
         with patch.object(
             network._rpc, "search", new_callable=AsyncMock, return_value={"feed": []}

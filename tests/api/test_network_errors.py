@@ -152,6 +152,14 @@ class TestHandleErrors:
                 await net.resolve_post("p1")
 
     @pytest.mark.asyncio
+    async def test_unresolve_post_error_propagates(self) -> None:
+        net = _make_network()
+        with patch("piazza_sdk.api.network._domain_unresolve_post") as mock:
+            mock.side_effect = RuntimeError("unresolve fail")
+            with pytest.raises(RuntimeError, match="unresolve fail"):
+                await net.unresolve_post("p1")
+
+    @pytest.mark.asyncio
     async def test_save_draft_error_propagates(self) -> None:
         net = _make_network()
         with patch("piazza_sdk.api.network._domain_save_draft") as mock:

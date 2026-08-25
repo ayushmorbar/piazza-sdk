@@ -7,6 +7,15 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.MM.DD`).
 
 ## [Unreleased]
 
+## [2026.08.25.1] - 2026-08-25
+
+### Added
+- `Network.unresolve_post(post_id)` — reverse a post's resolved status via `content.update(status="active")`.
+- `Post.is_upvoted` property — returns `True` when `is_tag_good` or `is_tag_endorse` is truthy in the raw payload.
+- Fixed `domain/posts.py` `__all__` — now exports all 26 domain functions (was missing 9 + the new `unresolve_post`).
+- Enriched docstrings with runnable ```` ```python ```` code examples for `resolve_post`, `unresolve_post`, `is_upvoted`, `content_mark_resolved`, and `content_resolve`.
+- Live verification: `test_dual_role_complete_lifecycle` now exercises `unresolve_post` and `is_upvoted` against the real Piazza API.
+
 ## [2026.08.24.2] - 2026-08-24
 
 ### Added

@@ -184,6 +184,17 @@ class TestResolvePost:
         assert result is True
 
 
+class TestUnresolvePost:
+    @pytest.mark.asyncio
+    async def test_delegates_to_domain(self) -> None:
+        net = _make_network()
+        with patch("piazza_sdk.api.network._domain_unresolve_post") as mock:
+            mock.return_value = True
+            result = await net.unresolve_post("p1")
+        mock.assert_awaited_once_with(net._rpc, post_id="p1")
+        assert result is True
+
+
 class TestDeletePost:
     @pytest.mark.asyncio
     async def test_delegates_to_domain(self) -> None:

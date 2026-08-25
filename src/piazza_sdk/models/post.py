@@ -495,6 +495,29 @@ class Post(BaseModel):
         """The first instructor answer child, if any."""
         return next((c for c in self.children if c.type == "i_answer"), None)
 
+    @property
+    def is_upvoted(self) -> bool:
+        """Whether the current user has upvoted this post.
+
+        Mirrors the Node.js reference ``upvoted`` field which combines
+        ``is_tag_good`` (student upvote) and ``is_tag_endorse``
+        (instructor badge) from the live API response.
+
+        Example:
+            ```python
+            from piazza_sdk.models.post import Post
+
+            # After fetching a post from the network:
+            post = await network.get_post("cl7k3x2f5")
+
+            if post.is_upvoted:
+                print(f"You have endorsed '{post.title}'")
+            else:
+                print("You have not endorsed this post yet")
+            ```
+        """
+        return bool(self.raw.get("is_tag_good")) or bool(self.raw.get("is_tag_endorse"))
+
     def normalized(self) -> Post:
         """Return a new Post with HTML content normalized to Markdown.
 

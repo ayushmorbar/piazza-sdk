@@ -9,18 +9,29 @@ __all__ = [
     "add_followup",
     "add_tag",
     "answer_post",
+    "auto_save_draft",
+    "bookmark_post",
+    "cancel_edit",
     "create_folder",
     "create_post",
+    "create_reply",
     "delete_post",
+    "edit_post",
     "endorse",
+    "favorite_post",
     "mark_as_unread",
+    "mark_duplicate",
+    "pin_post",
+    "remove_endorsement",
     "remove_tag",
     "resolve_post",
     "save_draft",
-    "upload_asset",
-    "pin_post",
+    "unbookmark_post",
+    "unfavorite_post",
     "unpin_post",
-    "mark_duplicate",
+    "unresolve_post",
+    "upload_asset",
+    "view_post",
 ]
 
 import asyncio
@@ -407,10 +418,12 @@ async def resolve_post(
 ) -> bool:
     """Mark a post as resolved.
 
-    This fetches the current post data and re-submits it with
-    ``status="resolved"`` via ``content.update``.  The dedicated
-    ``content.mark_resolved`` endpoint is unreliable on the live
-    API and returns *Invalid content*.
+    Fetches the current post data and re-submits it with
+    ``status="resolved"`` via ``content.update``.  This is the
+    preferred way to change post-level status — the dedicated
+    ``content.mark_resolved`` RPC can return *Invalid content* on
+    some live API payloads and should only be used for follow-up/comment
+    resolution.
 
     Args:
         rpc: RPC client instance.
@@ -425,14 +438,23 @@ async def resolve_post(
 
     Note:
         Unlike sibling operations, generic (non-SDK) exceptions propagate
-        unwrapped here. This is an intentional, tested contract — callers
+        unwrapped here.  This is an intentional, tested contract — callers
         that need uniform wrapping should catch ``Exception`` at the call site.
 
-        Example:
-            ```python
-            # Example for resolve_post
-            res = await resolve_post()
-            ```
+    Example:
+        ```python
+        from piazza_sdk.api.rpc import RPC
+        from piazza_sdk.domain.posts import resolve_post
+
+        async def mark_answered(rpc: RPC, post_id: str) -> bool:
+            \"\"\"Mark a question as resolved once answered.\"\"\"
+            return await resolve_post(rpc, post_id=post_id)
+
+        # Typical usage inside an async session context:
+        success = await resolve_post(rpc, post_id="cl7k3x2f5")
+        if success:
+            print("Post marked as resolved")
+        ```
     """
     if not post_id or not post_id.strip():
         raise ValidationError("post_id must be non-empty")
@@ -459,6 +481,75 @@ async def resolve_post(
         folders=folders,
         anonymous=post_data.get("default_anonymity", "no"),
         status="resolved",
+    )
+    if not isinstance(raw, dict):
+        return True
+    return raw.get("result", "success") in (None, "success")
+
+
+async def unresolve_post(
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: str
+) -> bool:
+    """Mark a resolved post as active (unresolve).
+
+    This fetches the current post data and re-submits it with
+    ``status="active"`` via ``content.update``.  Mirrors the behaviour
+    of :func:`resolve_post` but sets the status back to ``"active"``.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager for automatic refresh.
+        post_id: ID of the post to unresolve.
+
+    Returns:
+        True if the operation succeeded.
+
+    Raises:
+        ValidationError: If post_id is empty.
+
+    Note:
+        Unlike sibling operations, generic (non-SDK) exceptions propagate
+        unwrapped here.  This is an intentional, tested contract — callers
+        that need uniform wrapping should catch ``Exception`` at the call site.
+
+    Example:
+        ```python
+        from piazza_sdk.api.rpc import RPC
+        from piazza_sdk.domain.posts import unresolve_post
+
+        async def reopen_question(rpc: RPC, post_id: str) -> bool:
+            \"\"\"Reopen a previously resolved question so students can reply.\"\"\"
+            return await unresolve_post(rpc, post_id=post_id)
+
+        # Typical usage inside an async session context:
+        success = await unresolve_post(rpc, post_id="cl7k3x2f5")
+        if success:
+            print("Post reopened successfully")
+        ```
+    """
+    if not post_id or not post_id.strip():
+        raise ValidationError("post_id must be non-empty")
+    post_data: dict[str, Any] = {}
+    if hasattr(rpc, "content_get"):
+        res: Any = rpc.content_get(post_id)
+        if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
+            post_data = await res
+        elif isinstance(res, dict):
+            post_data = res
+    history_entries = post_data.get("history", [])
+    first_hist = (
+        history_entries[0] if history_entries and isinstance(history_entries[0], dict) else {}
+    )
+    subject = first_hist.get("subject", post_data.get("subject", ""))
+    content = first_hist.get("content", post_data.get("content", ""))
+    folders = post_data.get("folders", ["other"])
+    raw: Any = await rpc.content_update(
+        cid=post_id,
+        subject=subject,
+        content=content,
+        folders=folders,
+        anonymous=post_data.get("default_anonymity", "no"),
+        status="active",
     )
     if not isinstance(raw, dict):
         return True

@@ -94,6 +94,12 @@ async def test_happy_path_resolve_post(rpc_mock):
 
 
 @pytest.mark.asyncio
+async def test_happy_path_unresolve_post(rpc_mock):
+    with contextlib.suppress(Exception):
+        await mod.unresolve_post(rpc_mock)
+
+
+@pytest.mark.asyncio
 async def test_happy_path_mark_as_unread(rpc_mock):
     with contextlib.suppress(Exception):
         await mod.mark_as_unread(rpc_mock)

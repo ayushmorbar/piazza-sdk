@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime  # noqa: TC003
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from piazza_sdk.models.enums import FeedItemDefaultAnonymity, FeedItemType, FeedSortOrder
 
@@ -98,8 +98,8 @@ class FeedItem(BaseModel):
     d_bucket: str | None = Field(
         default=None, alias="d-bucket", description="Date bucket (e.g. Yesterday)"
     )
-    feed_groups: list[dict[str, Any]] = Field(
-        default_factory=list, description="Feed group categorization data"
+    feed_groups: list[dict[str, Any]] | str | None = Field(
+        default=None, description="Feed group categorization data"
     )
     gd: int | None = Field(default=None, description="Good question count")
     gd_a: int | None = Field(default=None, description="Good answer count")
@@ -111,12 +111,26 @@ class FeedItem(BaseModel):
     is_new: bool = Field(default=False, description="Whether feed item is new")
     view_adjust: int | None = Field(default=None, description="View count adjustment token")
     log: list[dict[str, Any]] = Field(
-        default_factory=list, alias="change_log", description="Change log entries"
+        default_factory=list,
+        validation_alias=AliasChoices("log", "change_log"),
+        description="Change log entries",
     )
     stat: FeedItemStat | None = Field(default=None, description="Feed item statistics")
     folder_num: int = Field(default=0, description="Folder number")
     has_i: bool | None = Field(default=None, description="Whether post has instructor answer")
     has_s: bool | None = Field(default=None, description="Whether post has student answer")
+    hidden: bool = Field(default=False, description="Whether the feed item is hidden")
+    m: int | None = Field(default=None, description="Modified timestamp or token")
+    main_version: int | None = Field(default=None, description="Main version")
+    modified: str | datetime | None = Field(default=None, description="Modified timestamp")
+    my_favorite: bool = Field(
+        default=False, description="Whether the item is favorited by the user"
+    )
+    no_answer_followup: int = Field(default=0, description="Number of followups with no answer")
+    num_favorites: int = Field(default=0, description="Number of favorites")
+    request_instructor: int = Field(default=0, description="Instructor response requested")
+    rq: int | None = Field(default=None, description="Instructor requested flag or timestamp")
+    version: int | None = Field(default=None, description="Item version")
 
     @property
     def is_question(self) -> bool:

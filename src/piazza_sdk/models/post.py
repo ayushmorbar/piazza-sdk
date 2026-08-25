@@ -223,6 +223,18 @@ class Child(BaseModel):
     children: list[Child] = Field(
         default_factory=list, description="Nested child elements (e.g. comments on followups)"
     )
+    bucket_name: str = Field(default="", description="Bucket name")
+    bucket_order: int = Field(default=0, description="Bucket ordering")
+    config: dict[str, Any] | None = Field(default=None, description="Configuration")
+    data: dict[str, Any] | None = Field(default=None, description="Additional data")
+    folders: list[str] = Field(default_factory=list, description="Folder names")
+    no_upvotes: bool = Field(default=False, description="Whether no upvotes are allowed")
+    tag_good: list[dict[str, Any]] = Field(
+        default_factory=list, description="List of users who endorsed this answer"
+    )
+    tag_good_arr: list[str] = Field(
+        default_factory=list, description="List of user IDs who endorsed this answer"
+    )
 
 
 class Answer(BaseModel):
@@ -412,7 +424,11 @@ class Post(BaseModel):
         default=None, description="Timestamp when the post was created"
     )
     updated: datetime | None = Field(default=None, description="Timestamp of the last update")
-    bucket: str = Field(default="", description="Folder/topic bucket name")
+    bucket: str = Field(
+        default="",
+        validation_alias=AliasChoices("bucket", "bucket_name"),
+        description="Folder/topic bucket name",
+    )
     folders: list[str] = Field(default_factory=list, description="Folder names the post belongs to")
     tags: list[str] = Field(default_factory=list, description="List of user-defined tags")
     status: PostStatus = Field(default=PostStatus.ACTIVE, description="Post lifecycle status")
@@ -430,17 +446,21 @@ class Post(BaseModel):
     followed: bool = Field(
         default=False, description="Whether the current user is following this post"
     )
-    config: PostConfig = Field(
+    config: PostConfig | None = Field(
         default_factory=PostConfig, description="Post configuration (editor, emails, schedule)"
     )
-    config_data: dict[str, Any] = Field(
-        default_factory=dict, description="Additional config data from the API"
+    config_data: dict[str, Any] | None = Field(
+        default=None, description="Extended config data for special post types"
     )
-    question_stats: dict[str, Any] = Field(
-        default_factory=dict, description="Question statistics from the API"
+    question_stats: dict[str, Any] | None = Field(
+        default=None, description="Question statistics from the API"
     )
-    book: bool = Field(default=False, description="Whether the post is bookmarked")
-    users: dict[str, Any] = Field(default_factory=dict, description="User info dict from the API")
+    book: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("book", "bookmarked"),
+        description="Whether the post is bookmarked",
+    )
+    users: dict[str, Any] | None = Field(default=None, description="User info dict from the API")
     raw: dict[str, Any] = Field(
         default_factory=dict, description="Raw API response dict for advanced use cases"
     )
@@ -452,10 +472,14 @@ class Post(BaseModel):
     )
     answers: list[Answer] = Field(default_factory=list, description="Answer posts on this post")
     change_log: list[ChangeLogEntry] = Field(
-        default_factory=list, alias="log", description="Edit history entries"
+        default_factory=list,
+        validation_alias=AliasChoices("change_log", "log"),
+        description="Edit history entries",
     )
     endorsements: list[Endorsement] = Field(
-        default_factory=list, description="Endorsement/upvote records"
+        default_factory=list,
+        validation_alias=AliasChoices("endorsements", "tag_good"),
+        description="Endorsement/upvote records",
     )
     children: list[Child] = Field(
         default_factory=list, description="Child items (answers, follow-ups, comments)"
@@ -487,6 +511,27 @@ class Post(BaseModel):
     clobber: str | None = Field(default=None, description="Clobber state")
     user_endorse: dict[str, Any] | None = Field(default=None, description="User endorsement data")
     tag: str | None = Field(default=None, description="Post tag")
+
+    bucket_name: str = Field(default="", description="Bucket name from API")
+    bucket_order: int = Field(default=0, description="Bucket ordering")
+    data: dict[str, Any] | None = Field(default=None, description="Additional post data")
+    drafts: dict[str, Any] | None = Field(default=None, description="Drafts")
+    history_size: int = Field(default=0, description="Size of revision history")
+    i_edits: list[dict[str, Any]] = Field(default_factory=list, description="Instructor edits")
+    q_edits: list[dict[str, Any]] = Field(default_factory=list, description="Question edits")
+    s_edits: list[dict[str, Any]] = Field(default_factory=list, description="Student edits")
+    is_bookmarked: bool = Field(default=False, description="Whether bookmarked")
+    is_pinned: bool = Field(default=False, description="Whether pinned")
+    is_tag_good: bool = Field(default=False, description="Whether tagged good")
+    my_favorite: bool = Field(default=False, description="Whether it's my favorite")
+    no_answer_followup: int = Field(default=0, description="Number of followups with no answer")
+    num_favorites: int = Field(default=0, description="Number of favorites")
+    request_instructor: int = Field(default=0, description="Instructor response requested")
+    request_instructor_me: bool = Field(default=False, description="Requested instructor by me")
+    t: int | None = Field(default=None, description="Timestamp")
+    tag_good_arr: list[str] = Field(
+        default_factory=list, description="List of user IDs who tagged good"
+    )
 
     @model_validator(mode="after")
     def _auto_number_revisions(self) -> Post:
@@ -638,7 +683,7 @@ class Post(BaseModel):
                 )
                 for a in self.answers
             ],
-            log=self.change_log,
+            change_log=self.change_log,
             endorsements=self.endorsements,
             children=[
                 Child(

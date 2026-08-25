@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from collections.abc import Sequence
+from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
 from piazza_sdk.domain.feed import get_feed as _domain_get_feed
@@ -50,7 +51,13 @@ from piazza_sdk.domain.users import get_online_users as _domain_get_online_users
 from piazza_sdk.exceptions import FeedError, NotFoundError, PiazzaSDKError, ValidationError
 from piazza_sdk.models.feed import Feed, FeedFilter, FeedItem, FolderFilter
 from piazza_sdk.models.network import HallOfFameItem, NetworkInfo, Statistics
-from piazza_sdk.models.post import AssetUploadResponse, Post, PostCreatedResponse, PublishingOptions
+from piazza_sdk.models.post import (
+    AssetUploadResponse,
+    Post,
+    PostCreatedResponse,
+    PublishingOptions,
+    ScheduledPostConfirmation,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Sequence
@@ -412,6 +419,60 @@ class Network:
             post_type=post_type,
             anonymous=anonymous,
             options=options,
+            **kwargs,
+        )
+
+    async def schedule_post(  # noqa: PLR0913, PLR0917 - explicit scheduling surface
+        self,
+        title: str,
+        content: str,
+        at: datetime | int | float,
+        post_type: PostType | str = "question",
+        anonymous: bool = False,
+        folders: list[str] | None = None,
+        **kwargs: Any,
+    ) -> ScheduledPostConfirmation:
+        """Create a scheduled post (question or note).
+
+        Two-step live-verified wire flow: ``network.save_draft`` returns
+        a bare-string draft ID, then ``content.create`` confirms with
+        ``{"scheduled": true}``. No post ID exists until Piazza publishes
+        at *at*. Polls cannot be scheduled upstream.
+
+        Args:
+            title: Post title/subject.
+            content: Post content (HTML or plain text).
+            at: Publish time — :class:`~datetime.datetime` or unix
+                milliseconds. Must be in the future per Piazza.
+            post_type: ``"question"`` or ``"note"``.
+            anonymous: Whether to post anonymously.
+            folders: Folder names; must exist in the course
+                (defaults to ``["General"]``).
+            **kwargs: Additional parameters forwarded to the API.
+
+        Returns:
+            ScheduledPostConfirmation with draft ID and backend flag.
+
+        Raises:
+            ValidationError: On empty fields, poll type, or invalid *at*.
+
+        Example:
+            ```python
+            # Example for schedule_post
+            res = await network.schedule_post(title='...', content='...', at='...')
+            ```
+        """
+        await self._ensure_session()
+        from piazza_sdk.domain.posts import schedule_post as _domain_schedule_post  # noqa: PLC0415
+
+        return await _domain_schedule_post(
+            self._rpc,
+            title=title,
+            content=content,
+            at=at,
+            post_type=post_type,
+            anonymous=anonymous,
+            folders=folders,
             **kwargs,
         )
 

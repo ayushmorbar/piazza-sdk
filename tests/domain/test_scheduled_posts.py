@@ -1,0 +1,133 @@
+"""Unit tests for scheduled-post creation (network.save_draft flow)."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from piazza_sdk.domain.posts import _extract_draft_id, _to_epoch_ms, schedule_post
+from piazza_sdk.exceptions import ContentError, ValidationError
+
+
+def _rpc_with_draft(draft_response: Any) -> MagicMock:
+    rpc = MagicMock()
+    rpc.network_id = "test_nid"
+    rpc.network_save_draft = AsyncMock(return_value=draft_response)
+    rpc.content_create = AsyncMock(return_value={"id": "new_post_1", "nr": 42})
+    return rpc
+
+
+class TestToEpochMs:
+    def test_datetime_utc(self):
+        dt = datetime(2026, 1, 1, 0, 0, 30, tzinfo=UTC)
+        assert _to_epoch_ms(dt) == 1767225630000
+
+    def test_naive_datetime_treated_as_utc(self):
+        naive = datetime(2026, 1, 1, 0, 0, 30)  # noqa: DTZ001 - naive is the point
+        assert _to_epoch_ms(naive) == 1767225630000
+
+    def test_passthrough_number(self):
+        assert _to_epoch_ms(1893456000000) == 1893456000000
+        assert _to_epoch_ms(1893456000000.5) == 1893456000000
+
+    @pytest.mark.parametrize("bad", [True, "soon", None, [1]])
+    def test_invalid_shapes_rejected(self, bad):
+        with pytest.raises(ValidationError):
+            _to_epoch_ms(bad)
+
+
+class TestExtractDraftId:
+    def test_bare_string(self):
+        assert _extract_draft_id("abc123") == "abc123"
+
+    def test_dict_id(self):
+        assert _extract_draft_id({"id": "d1"}) == "d1"
+
+    def test_nested_draft_id(self):
+        assert _extract_draft_id({"draft": {"draftId": "d2"}}) == "d2"
+
+    def test_int_coerced(self):
+        assert _extract_draft_id({"id": 77}) == "77"
+
+    def test_missing_raises_content_error(self):
+        with pytest.raises(ContentError, match="draft ID"):
+            _extract_draft_id({"nope": True})
+
+
+class TestSchedulePost:
+    """Two-step wire flow: network.save_draft then content.create."""
+
+    async def test_payload_shapes_and_confirmation(self):
+        rpc = _rpc_with_draft("draft_9")  # live returns a bare string
+        rpc.content_create = AsyncMock(return_value={"scheduled": True})
+        at = datetime(2030, 6, 1, 12, 0, 0, tzinfo=UTC)
+
+        result = await schedule_post(
+            rpc, title="Future Q", content="<p>body</p>", at=at, folders=["hw1"]
+        )
+        assert result.draft_id == "draft_9"
+        assert result.scheduled is True
+
+        draft_call = rpc.network_save_draft.await_args.kwargs["draft"]
+        assert draft_call["folders"] == ["hw1"]
+        assert draft_call["txt"] == {"post_summary": "Future Q"}
+        btn = draft_call["btn"]
+        assert btn["schedule_later"] is True
+        assert btn["post_type_question"] is True
+        assert btn["post_type_note"] is False
+        assert isinstance(btn["schedule_later_time"], int)
+
+        create_params = rpc.content_create.await_args.kwargs
+        assert create_params["subject"] == "Future Q"
+        assert create_params["draftId"] == "draft_9"
+        assert create_params["config"]["schedule_later"] is True
+        assert create_params["config"]["schedule_later_time"] == btn["schedule_later_time"]
+
+    async def test_scheduled_flag_defaults_false_on_empty_result(self):
+        rpc = _rpc_with_draft({"id": "d"})
+        rpc.content_create = AsyncMock(return_value={})
+        result = await schedule_post(rpc, title="t", content="c", at=1)
+        assert result.draft_id == "d"
+        assert result.scheduled is False
+
+    async def test_note_button_state(self):
+        rpc = _rpc_with_draft({"id": "d"})
+        await schedule_post(rpc, title="n", content="c", at=1, post_type="note")
+        btn = rpc.network_save_draft.await_args.kwargs["draft"]["btn"]
+        assert btn["post_type_note"] is True
+        assert btn["post_type_question"] is False
+
+    async def test_poll_rejected(self):
+        rpc = _rpc_with_draft({})
+        with pytest.raises(ValidationError, match="poll"):
+            await schedule_post(rpc, title="t", content="c", at=1, post_type="poll")
+        rpc.network_save_draft.assert_not_called()
+
+    async def test_default_folder_general(self):
+        rpc = _rpc_with_draft({"id": "d"})
+        await schedule_post(rpc, title="t", content="c", at=1)
+        draft = rpc.network_save_draft.await_args.kwargs["draft"]
+        assert draft["folders"] == ["General"]
+
+    async def test_config_merge_does_not_clobber_caller_keys(self):
+        rpc = _rpc_with_draft({"id": "d"})
+        await schedule_post(rpc, title="t", content="c", at=1, config={"custom": 1})
+        cfg = rpc.content_create.await_args.kwargs["config"]
+        assert cfg["custom"] == 1
+        assert cfg["schedule_later"] is True
+
+    async def test_unrecognized_draft_response_raises(self):
+        rpc = _rpc_with_draft({"unexpected": True})
+        with pytest.raises(ContentError, match="draft ID"):
+            await schedule_post(rpc, title="t", content="c", at=1)
+
+    @pytest.mark.parametrize("empty", [{"title": ""}, {"content": " "}])
+    async def test_empty_fields_rejected(self, empty):
+        rpc = _rpc_with_draft({})
+        kwargs: dict[str, str] = {"title": "t", "content": "c"}
+        kwargs.update(empty)
+        with pytest.raises(ValidationError):
+            await schedule_post(rpc, at=1, **kwargs)

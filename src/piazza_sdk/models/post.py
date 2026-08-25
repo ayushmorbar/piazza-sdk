@@ -300,6 +300,24 @@ class StudentInfo(BaseModel):
     role: str = Field(default="", description="Student role string")
 
 
+class ScheduledPostConfirmation(BaseModel):
+    """Confirmation returned after queueing a scheduled post.
+
+    ``content.create`` with a ``draftId`` responds ``{"scheduled": true}``
+    — no post ID exists until Piazza publishes at the scheduled time;
+    the ``draft_id`` is the handle the backend holds onto.
+
+    Attributes:
+        draft_id: Draft identifier accepted by the scheduler.
+        scheduled: Whether the backend confirmed scheduling.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    draft_id: str = Field(description="Draft identifier held by the scheduler")
+    scheduled: bool = Field(default=False, description="Backend scheduling confirmation")
+
+
 class PublishingOptions(BaseModel):
     """Options for post creation/publishing behavior.
 

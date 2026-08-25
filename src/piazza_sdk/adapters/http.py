@@ -1047,6 +1047,41 @@ class RPC:
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to save draft"
         )
 
+    async def network_save_draft(self, **kwargs: Any) -> Any:
+        """Save a scheduling draft via ``network.save_draft``.
+
+        Distinct from :meth:`content_save_draft` (the UI's per-post draft
+        store): this network-level endpoint returns the created draft ID
+        as a **bare string** result, which ``content.create`` accepts
+        alongside ``config.schedule_later``/``schedule_later_time`` to
+        queue a scheduled post.
+
+        Args:
+            **kwargs: Draft parameters (e.g. the ``draft`` structure).
+
+        Returns:
+            The draft ID (bare string) on success.
+
+        Example:
+            ```python
+            # Example for network_save_draft
+            res = await network_save_draft(**kwargs)
+            ```
+        """
+        blocked = _BLOCKED_KEYS & kwargs.keys()
+        if blocked:
+            raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
+        payload = {
+            "method": "network.save_draft",
+            "params": {**kwargs, "nid": self._nid, "aid": self._last_aid},
+        }
+        # ``call`` (not ``_safe_call``) — the endpoint returns the draft
+        # ID as a *bare string* result which ``_safe_call`` would coerce
+        # to ``{}``.
+        return await self.call(
+            "/logic/api", payload, error_cls=ContentError, error_msg="Failed to save draft"
+        )
+
     async def content_get_similar(self, post_id: str, **kwargs: Any) -> dict[str, Any]:
         """Get similar posts for a given post.
 

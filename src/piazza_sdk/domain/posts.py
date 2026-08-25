@@ -26,6 +26,7 @@ __all__ = [
     "remove_tag",
     "resolve_post",
     "save_draft",
+    "schedule_post",
     "unbookmark_post",
     "unfavorite_post",
     "unpin_post",
@@ -36,6 +37,7 @@ __all__ = [
 
 import asyncio
 import mimetypes
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -46,7 +48,11 @@ from piazza_sdk.exceptions import (
     UploadError,
     ValidationError,
 )
-from piazza_sdk.models.post import AssetUploadResponse, PostCreatedResponse
+from piazza_sdk.models.post import (
+    AssetUploadResponse,
+    PostCreatedResponse,
+    ScheduledPostConfirmation,  # noqa: I001 - grouped import
+)
 
 if TYPE_CHECKING:
     from piazza_sdk.api.rpc import RPC
@@ -673,6 +679,169 @@ async def save_draft(
         raise
     except Exception as exc:
         raise ContentError(f"Failed to save draft: {exc}") from exc
+
+
+# Milliseconds per second for unix-millisecond scheduling timestamps.
+_MS_PER_SECOND = 1000
+
+# Wire keys a ``network.save_draft`` response may carry the ID under.
+_DRAFT_ID_KEYS = ("id", "draft_id", "draftId")
+
+
+def _to_epoch_ms(at: datetime | int | float) -> int:
+    """Normalize a scheduling target to a unix-millisecond timestamp.
+
+    Args:
+        at: Aware/naive :class:`~datetime.datetime` (naive is treated as
+            UTC) or an already-epoch-milliseconds number.
+
+    Returns:
+        Unix epoch milliseconds.
+
+    Raises:
+        ValidationError: If *at* is neither datetime nor number.
+    """
+    if isinstance(at, bool):
+        raise ValidationError("at must be a datetime or unix millisecond timestamp")
+    if isinstance(at, int | float):
+        return int(at)
+    if isinstance(at, datetime):
+        aware = at if at.tzinfo is not None else at.replace(tzinfo=UTC)
+        return int(aware.timestamp() * _MS_PER_SECOND)
+    raise ValidationError("at must be a datetime or unix millisecond timestamp")
+
+
+def _extract_draft_id(response: Any) -> str:
+    """Pull the draft identifier out of a ``network.save_draft`` response.
+
+    Args:
+        response: Unwrapped API response (dict or bare string).
+
+    Returns:
+        The draft ID string.
+
+    Raises:
+        ContentError: If no recognizable identifier is present.
+    """
+    if isinstance(response, str) and response.strip():
+        return response
+    if isinstance(response, dict):
+        nested = response.get("draft")
+        candidates: list[Any] = [response.get(key) for key in _DRAFT_ID_KEYS]
+        if isinstance(nested, dict):
+            candidates.extend(nested.get(key) for key in _DRAFT_ID_KEYS)
+        for value in candidates:
+            if isinstance(value, str) and value.strip():
+                return value
+            if isinstance(value, int) and not isinstance(value, bool):
+                return str(value)
+    raise ContentError(f"Could not extract draft ID from network.save_draft response: {response!r}")
+
+
+async def schedule_post(  # noqa: PLR0913 - explicit scheduling surface
+    rpc: RPC,
+    *,
+    session: SessionStateManager | None = None,
+    title: str,
+    content: str,
+    at: datetime | int | float,
+    post_type: PostType | str = "question",
+    anonymous: bool = False,
+    folders: list[str] | None = None,
+    **kwargs: Any,
+) -> ScheduledPostConfirmation:
+    """Create a scheduled post (question or note).
+
+    Implements the two-step wire flow used by Piazza's web scheduler
+    (both steps live-verified 2026-08):
+
+    1. ``network.save_draft`` persists the draft carrying
+       ``btn.schedule_later`` / ``btn.schedule_later_time`` and returns
+       the draft ID as a **bare-string** result.
+    2. ``content.create`` submits with ``draftId`` plus
+       ``config.schedule_later`` / ``config.schedule_later_time`` and is
+       confirmed with ``{"scheduled": true}`` — no post ID exists until
+       Piazza publishes the content at *at*.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager for automatic refresh.
+        title: Post title/subject.
+        content: Post content (HTML or plain text).
+        at: When to publish — :class:`~datetime.datetime` or unix
+            milliseconds since epoch. Must be in the future.
+        post_type: ``"question"`` or ``"note"``; polls cannot be
+            scheduled upstream.
+        anonymous: Whether to post anonymously.
+        folders: Folder names; must exist in the course (defaults to
+            ``["General"]``).
+        **kwargs: Additional parameters forwarded to ``content.create``.
+
+    Returns:
+        ScheduledPostConfirmation with the draft ID and the backend's
+        ``scheduled`` flag.
+
+    Raises:
+        ValidationError: On empty title/content, poll type, or invalid
+            *at* shape.
+        ContentError: If either wire step fails.
+
+        Example:
+            ```python
+            # Example for schedule_post
+            res = await schedule_post()
+            ```
+    """
+    if not title or not title.strip():
+        raise ValidationError("title must be non-empty")
+    if not content or not content.strip():
+        raise ValidationError("content must be non-empty")
+    normalized_type = str(post_type).lower()
+    if normalized_type == "poll":
+        raise ValidationError("Piazza does not support scheduling poll posts")
+    publish_at_ms = _to_epoch_ms(at)
+
+    try:
+        draft_response = await rpc.network_save_draft(
+            draft={
+                "content": content,
+                "folders": folders if folders is not None else ["General"],
+                "btn": {
+                    "post_type_note": normalized_type == "note",
+                    "post_type_question": normalized_type == "question",
+                    "schedule_later": True,
+                    "schedule_later_time": publish_at_ms,
+                },
+                "txt": {"post_summary": title},
+            }
+        )
+        draft_id = _extract_draft_id(draft_response)
+
+        extra_config = kwargs.pop("config", None)
+        config: dict[str, Any] = (
+            {**extra_config, "schedule_later": True, "schedule_later_time": publish_at_ms}
+            if isinstance(extra_config, dict)
+            else {"schedule_later": True, "schedule_later_time": publish_at_ms}
+        )
+        raw = await rpc.content_create(
+            subject=title,
+            title=title,
+            content=content,
+            type=post_type,
+            anonymous="stud" if anonymous else "no",
+            folders=folders if folders is not None else ["General"],
+            draftId=draft_id,
+            config=config,
+            **kwargs,
+        )
+        result = raw if isinstance(raw, dict) else {}
+        return ScheduledPostConfirmation(
+            draft_id=draft_id, scheduled=bool(result.get("scheduled", False))
+        )
+    except (ContentError, PiazzaSDKError):
+        raise
+    except Exception as exc:
+        raise ContentError(f"Failed to schedule post: {exc}") from exc
 
 
 async def upload_asset(

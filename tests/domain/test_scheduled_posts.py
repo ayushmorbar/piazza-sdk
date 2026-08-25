@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from piazza_sdk.domain.posts import _extract_draft_id, _to_epoch_ms, schedule_post
+from piazza_sdk.domain.posts import _extract_draft_id, _to_epoch_ms, create_post, schedule_post
 from piazza_sdk.exceptions import ContentError, ValidationError
 
 
@@ -131,3 +131,54 @@ class TestSchedulePost:
         kwargs.update(empty)
         with pytest.raises(ValidationError):
             await schedule_post(rpc, at=1, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Private posts to staff (feed_groups contract)
+# ---------------------------------------------------------------------------
+
+
+class TestCreatePostPrivate:
+    """private_to_staff injects config.feed_groups = instr_{nid},{uid}."""
+
+    @staticmethod
+    def _rpc(uid: str | None = "u_42") -> MagicMock:
+        rpc = MagicMock()
+        rpc.network_id = "nid_1"
+        rpc.content_create = AsyncMock(return_value={"id": "p_new"})
+        if uid is not None:
+            rpc.get_user_profile = AsyncMock(return_value={"user_id": uid})
+        else:
+            rpc.get_user_profile = AsyncMock(return_value={})
+        return rpc
+
+    async def test_resolves_uid_and_injects_feed_groups(self):
+        rpc = self._rpc()
+        await create_post(rpc, title="t", content="c", private_to_staff=True)
+        cfg = rpc.content_create.await_args.kwargs["config"]
+        assert cfg == {"feed_groups": "instr_nid_1,u_42"}
+        rpc.get_user_profile.assert_awaited_once()
+
+    async def test_explicit_uid_skips_profile_call(self):
+        rpc = self._rpc()
+        await create_post(rpc, title="t", content="c", private_to_staff=True, author_uid="u_pre")
+        cfg = rpc.content_create.await_args.kwargs["config"]
+        assert cfg == {"feed_groups": "instr_nid_1,u_pre"}
+        rpc.get_user_profile.assert_not_called()
+
+    async def test_unresolvable_uid_raises_validation(self):
+        rpc = self._rpc(uid=None)
+        with pytest.raises(ValidationError, match="author UID"):
+            await create_post(rpc, title="t", content="c", private_to_staff=True)
+
+    async def test_merges_with_caller_config_without_clobber(self):
+        rpc = self._rpc()
+        await create_post(rpc, title="t", content="c", private_to_staff=True, config={"custom": 7})
+        cfg = rpc.content_create.await_args.kwargs["config"]
+        assert cfg["custom"] == 7
+        assert cfg["feed_groups"] == "instr_nid_1,u_42"
+
+    async def test_no_config_key_when_public(self):
+        rpc = self._rpc()
+        await create_post(rpc, title="t", content="c")
+        assert "config" not in rpc.content_create.await_args.kwargs

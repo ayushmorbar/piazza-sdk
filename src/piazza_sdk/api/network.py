@@ -378,13 +378,16 @@ class Network:
         except Exception as exc:
             raise PiazzaSDKError(f"Failed to parse post {post_id}: {exc}") from exc
 
-    async def create_post(
+    async def create_post(  # noqa: PLR0913, PLR0917 - explicit publishing surface
         self,
         title: str,
         content: str,
         post_type: PostType | str = "question",
         anonymous: bool = False,
         options: PublishingOptions | None = None,
+        folders: list[str] | None = None,
+        private_to_staff: bool = False,
+        author_uid: str | None = None,
         **kwargs: Any,
     ) -> PostCreatedResponse:
         """Create a new post.
@@ -395,6 +398,15 @@ class Network:
             post_type: Type of post (question, note, poll).
             anonymous: Whether to post anonymously.
             options: Publishing options (bypass email, silent update, anonymity).
+            folders: Folder names; must exist in the course. Defaults to
+                ``["General"]``.
+            private_to_staff: Visible to instructors only; injects
+                ``config.feed_groups = "instr_{nid},{uid}"`` after
+                resolving your user ID (one extra round-trip unless
+                *author_uid* given).
+            author_uid: Pre-resolved author user ID for
+                *private_to_staff*, skipping the profile lookup.
+            **kwargs: Additional parameters to pass to the API.
 
         Returns:
             PostCreatedResponse with new post ID.
@@ -419,6 +431,9 @@ class Network:
             post_type=post_type,
             anonymous=anonymous,
             options=options,
+            folders=folders,
+            private_to_staff=private_to_staff,
+            author_uid=author_uid,
             **kwargs,
         )
 

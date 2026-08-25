@@ -71,6 +71,8 @@ async def create_post(  # noqa: PLR0913
     anonymous: bool = False,
     options: PublishingOptions | None = None,
     folders: list[str] | None = None,
+    private_to_staff: bool = False,
+    author_uid: str | None = None,
     **kwargs: Any,
 ) -> PostCreatedResponse:
     """Create a new post.
@@ -85,15 +87,23 @@ async def create_post(  # noqa: PLR0913
         options: Publishing options (bypass email, silent update, anonymity).
         folders: Folder names to file the post under. Defaults to
             ``["General"]``. The folder must already exist in the target
-            course — Piazza rejects unknown folders with
+            course - Piazza rejects unknown folders with
             "Please specify folder" (verified live).
+        private_to_staff: Make the post visible only to instructors.
+            Resolves the author UID from ``user_profile.get_profile``
+            (one extra round-trip) and injects
+            ``config.feed_groups = "instr_{nid},{uid}"`` (hfaran #77
+            contract).
+        author_uid: Pre-resolved author user ID; skips the profile
+            round-trip when ``private_to_staff`` is set.
         **kwargs: Additional parameters.
 
     Returns:
         PostCreatedResponse with new post ID.
 
     Raises:
-        ValidationError: If title or content is empty.
+        ValidationError: If title or content is empty, or the author
+            UID cannot be resolved for a staff-private post.
 
         Example:
             ```python
@@ -105,25 +115,44 @@ async def create_post(  # noqa: PLR0913
         raise ValidationError("title must be non-empty")
     if not content or not content.strip():
         raise ValidationError("content must be non-empty")
+
+    extra_config = kwargs.pop("config", None)
+    config: dict[str, Any] = dict(extra_config) if isinstance(extra_config, dict) else {}
+    if private_to_staff:
+        uid = author_uid
+        if uid is None:
+            profile = await rpc.get_user_profile()
+            candidate = profile.get("user_id") if isinstance(profile, dict) else None
+            if not candidate:
+                raise ValidationError(
+                    "Could not resolve author UID for private post; pass author_uid explicitly"
+                )
+            uid = str(candidate)
+        nid = getattr(rpc, "network_id", "") or ""
+        config["feed_groups"] = f"instr_{nid},{uid}"
+
     extra = dict(kwargs)
     if options is not None:
         extra.update(options.to_kwargs())
     # Piazza's content.create expects ``subject`` (verified live: sending
     # only ``title`` fails with "Missing parameter: subject"), an anonymity
-    # *string* ("no"/"stud"/"full") — bool False fails with "Invalid
-    # anonymity setting" — and at least one folder ("Please specify
+    # *string* ("no"/"stud"/"full") - bool False fails with "Invalid
+    # anonymity setting" - and at least one folder ("Please specify
     # folder"). ``title`` is still sent for backward compatibility.
     if folders is None:
         folders = ["General"]
-    raw = await rpc.content_create(
-        subject=title,
-        title=title,
-        content=content,
-        type=post_type,
-        anonymous="stud" if anonymous else "no",
-        folders=folders,
+    payload: dict[str, Any] = {
+        "subject": title,
+        "title": title,
+        "content": content,
+        "type": post_type,
+        "anonymous": "stud" if anonymous else "no",
+        "folders": folders,
         **extra,
-    )
+    }
+    if config:
+        payload["config"] = config
+    raw = await rpc.content_create(**payload)
     result = raw.get("result", raw)
     return PostCreatedResponse.model_validate(result)
 

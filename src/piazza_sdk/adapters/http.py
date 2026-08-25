@@ -198,6 +198,11 @@ class RPC:
         """Return the current httpx client from the session adapter."""
         return self._session.client
 
+    @property
+    def network_id(self) -> str:
+        """Piazza network (course) ID bound to this client (RPCProtocol)."""
+        return self._nid
+
     async def _throttle(self) -> None:
         """Insert a uniform-random delay between consecutive requests.
 

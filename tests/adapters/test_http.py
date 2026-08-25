@@ -95,6 +95,11 @@ class TestRPCInit:
         rpc = RPC(_make_session(), "https://piazza.com/", "nid")
         assert rpc._base_url == "https://piazza.com"
 
+    def test_network_id_property_matches_rpcprotocol(self):
+        """Regression: RPC must expose network_id (RPCProtocol contract)."""
+        rpc = _make_rpc()
+        assert rpc.network_id == "test_nid"
+
     def test_stores_nid(self):
         rpc = _make_rpc()
         assert rpc._nid == "test_nid"

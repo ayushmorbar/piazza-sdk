@@ -124,58 +124,25 @@ class TestResolvePostPolymorphic:
 
     async def test_str_cid(self) -> None:
         rpc = _make_rpc()
-        rpc.content_get = AsyncMock(
-            return_value={
-                "history": [{"subject": "Q?", "content": "<p>body</p>"}],
-                "folders": ["cs101"],
-                "default_anonymity": "no",
-            }
-        )
-        rpc.content_update = AsyncMock(return_value={"result": "success"})
+        rpc.content_mark_resolved = AsyncMock(return_value={"result": "success"})
         result = await resolve_post(rpc, post_id="post_abc")
         assert result is True
-        rpc.content_get.assert_awaited_once_with("post_abc")
-        rpc.content_update.assert_awaited_once_with(
-            cid="post_abc",
-            subject="Q?",
-            content="<p>body</p>",
-            folders=["cs101"],
-            anonymous="no",
-            status="resolved",
-        )
+        rpc.content_mark_resolved.assert_awaited_once_with("post_abc", resolved=True)
 
     async def test_int_cid(self) -> None:
         rpc = _make_rpc()
-        rpc.content_get = AsyncMock(
-            return_value={
-                "history": [{"subject": "Q?", "content": "<p>body</p>"}],
-                "folders": ["cs101"],
-                "default_anonymity": "no",
-            }
-        )
-        rpc.content_update = AsyncMock(return_value={"result": "success"})
+        rpc.content_mark_resolved = AsyncMock(return_value={"result": "success"})
         result = await resolve_post(rpc, post_id=123)
         assert result is True
-        rpc.content_get.assert_awaited_once_with("123")
-        rpc.content_update.assert_awaited_once()
-        assert rpc.content_update.call_args.kwargs["cid"] == "123"
+        rpc.content_mark_resolved.assert_awaited_once_with("123", resolved=True)
 
     async def test_post_cid(self) -> None:
         rpc = _make_rpc()
-        rpc.content_get = AsyncMock(
-            return_value={
-                "history": [{"subject": "Q?", "content": "<p>body</p>"}],
-                "folders": ["cs101"],
-                "default_anonymity": "no",
-            }
-        )
-        rpc.content_update = AsyncMock(return_value={"result": "success"})
+        rpc.content_mark_resolved = AsyncMock(return_value={"result": "success"})
         post = Post(id="post_xyz")
         result = await resolve_post(rpc, post_id=post)
         assert result is True
-        rpc.content_get.assert_awaited_once_with("post_xyz")
-        rpc.content_update.assert_awaited_once()
-        assert rpc.content_update.call_args.kwargs["cid"] == "post_xyz"
+        rpc.content_mark_resolved.assert_awaited_once_with("post_xyz", resolved=True)
 
     async def test_empty_str_post_id_raises(self) -> None:
         rpc = _make_rpc()
@@ -193,56 +160,25 @@ class TestUnresolvePostPolymorphic:
 
     async def test_str_cid(self) -> None:
         rpc = _make_rpc()
-        rpc.content_get = AsyncMock(
-            return_value={
-                "history": [{"subject": "Q?", "content": "<p>body</p>"}],
-                "folders": ["cs101"],
-                "default_anonymity": "no",
-            }
-        )
-        rpc.content_update = AsyncMock(return_value={"result": "success"})
+        rpc.content_mark_resolved = AsyncMock(return_value={"result": "success"})
         result = await unresolve_post(rpc, post_id="post_abc")
         assert result is True
-        rpc.content_get.assert_awaited_once_with("post_abc")
-        rpc.content_update.assert_awaited_once_with(
-            cid="post_abc",
-            subject="Q?",
-            content="<p>body</p>",
-            folders=["cs101"],
-            anonymous="no",
-            status="active",
-        )
+        rpc.content_mark_resolved.assert_awaited_once_with("post_abc", resolved=False)
 
     async def test_int_cid(self) -> None:
         rpc = _make_rpc()
-        rpc.content_get = AsyncMock(
-            return_value={
-                "history": [{"subject": "Q?", "content": "<p>body</p>"}],
-                "folders": ["cs101"],
-                "default_anonymity": "no",
-            }
-        )
-        rpc.content_update = AsyncMock(return_value={"result": "success"})
+        rpc.content_mark_resolved = AsyncMock(return_value={"result": "success"})
         result = await unresolve_post(rpc, post_id=456)
         assert result is True
-        rpc.content_get.assert_awaited_once_with("456")
-        assert rpc.content_update.call_args.kwargs["cid"] == "456"
+        rpc.content_mark_resolved.assert_awaited_once_with("456", resolved=False)
 
     async def test_post_cid(self) -> None:
         rpc = _make_rpc()
-        rpc.content_get = AsyncMock(
-            return_value={
-                "history": [{"subject": "Q?", "content": "<p>body</p>"}],
-                "folders": ["cs101"],
-                "default_anonymity": "no",
-            }
-        )
-        rpc.content_update = AsyncMock(return_value={"result": "success"})
+        rpc.content_mark_resolved = AsyncMock(return_value={"result": "success"})
         post = Post(id="post_xyz")
         result = await unresolve_post(rpc, post_id=post)
         assert result is True
-        rpc.content_get.assert_awaited_once_with("post_xyz")
-        assert rpc.content_update.call_args.kwargs["cid"] == "post_xyz"
+        rpc.content_mark_resolved.assert_awaited_once_with("post_xyz", resolved=False)
 
     async def test_empty_str_post_id_raises(self) -> None:
         rpc = _make_rpc()

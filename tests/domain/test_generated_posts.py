@@ -25,6 +25,8 @@ def rpc_mock():
     rpc.content_delete = AsyncMock(return_value={})
     rpc.content_mark_read = AsyncMock(return_value={})
     rpc.content_mark_unread = AsyncMock(return_value={})
+    rpc.content_mark_resolved = AsyncMock(return_value={})
+    rpc.content_duplicate = AsyncMock(return_value={})
     rpc.add_students = AsyncMock(return_value={})
     rpc.network_get_users = AsyncMock(return_value=[{"id": "u1", "name": "A", "role": "student"}])
     rpc.network_get_online_users = AsyncMock(return_value=[])

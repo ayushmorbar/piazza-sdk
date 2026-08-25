@@ -9,9 +9,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from pydantic import ValidationError
+from pydantic import ValidationError as PydanticValidationError
 
-from piazza_sdk.adapters.http import RPC, _AuthRetryNeededError, _check_embedded_error
+from piazza_sdk.adapters.http import (
+    RPC,
+    _AuthRetryNeededError,
+    _check_embedded_error,
+    _generate_aid,
+    _int_to_base36,
+)
 from piazza_sdk.config import PiazzaConfig
 from piazza_sdk.exceptions import (
     AuthenticationError,
@@ -20,6 +26,7 @@ from piazza_sdk.exceptions import (
     PermissionError,
     PiazzaSDKError,
     RateLimitError,
+    ValidationError,
 )
 
 # ---------------------------------------------------------------------------
@@ -907,7 +914,7 @@ class TestEmbeddedErrorPatterns:
 class TestConfigValidator:
     def test_min_gt_max_raises(self):
         """throttle_min_delay > throttle_max_delay should raise ValueError."""
-        with pytest.raises(ValidationError, match="throttle_min_delay.*must be <="):
+        with pytest.raises(PydanticValidationError, match="throttle_min_delay.*must be <="):
             PiazzaConfig(course_id="test", throttle_min_delay=5.0, throttle_max_delay=1.0)
 
     def test_min_eq_max_ok(self):
@@ -1004,3 +1011,120 @@ class TestNetworkScopedPayloadShapes:
         rpc = self._rpc_with_aid()
         await invoke(rpc)
         assert self._sent_payload(rpc) == expected
+
+
+# ---------------------------------------------------------------------------
+# P2: _int_to_base36, _generate_aid, RPC._aid, RPC.invoke
+# ---------------------------------------------------------------------------
+
+
+class TestBase36Conversion:
+    def test_zero(self):
+        assert _int_to_base36(0) == "0"
+
+    def test_one(self):
+        assert _int_to_base36(1) == "1"
+
+    def test_ten(self):
+        assert _int_to_base36(10) == "a"
+
+    def test_thirty_five(self):
+        assert _int_to_base36(35) == "z"
+
+    def test_thirty_six(self):
+        assert _int_to_base36(36) == "10"
+
+    def test_large_value(self):
+        n = 36**6 + 1
+        result = _int_to_base36(n)
+        assert result.startswith("1")
+        assert len(result) == 7
+
+    def test_all_valid_chars(self):
+        result = _int_to_base36(36**4 - 1)
+        assert all(c in "0123456789abcdefghijklmnopqrstuvwxyz" for c in result)
+
+
+class TestGenerateAid:
+    def test_returns_nonempty_string(self):
+        aid = _generate_aid()
+        assert isinstance(aid, str)
+        assert len(aid) >= 6
+
+    def test_unique_across_calls(self):
+        seen = {_generate_aid() for _ in range(50)}
+        assert len(seen) == 50
+
+
+class TestAidAccessor:
+    def test_falls_back_to_generated_when_no_server_aid(self):
+        rpc = _make_rpc()
+        assert rpc._last_aid is None
+        aid = rpc._aid()
+        assert isinstance(aid, str)
+        assert len(aid) >= 6
+
+    def test_prefers_server_echoed_aid(self):
+        rpc = _make_rpc()
+        rpc._last_aid = "server-abc"
+        assert rpc._aid() == "server-abc"
+
+
+class TestRPCInvoke:
+    @pytest.mark.asyncio
+    async def test_logic_endpoint_default(self):
+        rpc = _make_rpc(
+            session=_make_session(_mock_client(200, {"result": {"stats": True}, "aid": "aid1"}))
+        )
+        await rpc.invoke("network.get_stats")
+        sent = rpc.client.request.call_args
+        assert "/logic/api" in sent.args[1]
+
+    @pytest.mark.asyncio
+    async def test_main_endpoint(self):
+        rpc = _make_rpc(
+            session=_make_session(_mock_client(200, {"result": {"count": 5}, "aid": "aid1"}))
+        )
+        await rpc.invoke("network.get_stats", api="main")
+        sent = rpc.client.request.call_args
+        assert "/main/api" in sent.args[1]
+
+    @pytest.mark.asyncio
+    async def test_invalid_api_raises_validation(self):
+        rpc = _make_rpc()
+        with pytest.raises(ValidationError, match="api must be"):
+            await rpc.invoke("test.method", api="bogus")
+
+    @pytest.mark.asyncio
+    async def test_nid_key_override(self):
+        rpc = _make_rpc(session=_make_session(_mock_client(200, {"result": {}, "aid": "aid1"})))
+        await rpc.invoke("user.status", nid_key="id")
+        sent = rpc.client.request.call_args
+        payload = sent.kwargs.get("json") or sent.args[2]
+        assert "id" in payload["params"]
+        assert "nid" not in payload["params"]
+
+    @pytest.mark.asyncio
+    async def test_data_overrides_default_nid(self):
+        rpc = _make_rpc(session=_make_session(_mock_client(200, {"result": {}, "aid": "aid1"})))
+        await rpc.invoke("content.get", {"nid": "custom_nid"})
+        sent = rpc.client.request.call_args
+        payload = sent.kwargs.get("json") or sent.args[2]
+        assert payload["params"]["nid"] == "custom_nid"
+
+    @pytest.mark.asyncio
+    async def test_method_in_payload(self):
+        rpc = _make_rpc(session=_make_session(_mock_client(200, {"result": {}, "aid": "aid1"})))
+        await rpc.invoke("network.get_students", {"nid": "test_nid"})
+        sent = rpc.client.request.call_args
+        payload = sent.kwargs.get("json") or sent.args[2]
+        assert payload["method"] == "network.get_students"
+
+    @pytest.mark.asyncio
+    async def test_empty_data(self):
+        rpc = _make_rpc(session=_make_session(_mock_client(200, {"result": {}, "aid": "aid1"})))
+        await rpc.invoke("user.status")
+        sent = rpc.client.request.call_args
+        payload = sent.kwargs.get("json") or sent.args[2]
+        assert payload["params"]["nid"] == "test_nid"
+        assert len(payload["params"]["aid"]) >= 6  # nonce fallback

@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import logging
 import random
+import string
 import time
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -30,6 +31,7 @@ from piazza_sdk.exceptions import (
     StatisticsError,
     UploadError,
     UserError,
+    ValidationError,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,34 @@ _DEFAULT_MAX_ATTEMPTS = 3
 _RETRY_BASE_DELAY_S = 1.0
 _RETRY_MAX_WAIT_S = 10.0
 _RATE_LIMIT_MAX_WAIT_S = 30.0
+
+# Reference-client aid nonce: base36(ms-timestamp) + base36(random * 36**4).
+_AID_RANDOM_SPACE = 1679616  # 36 ** 4
+_B36_ALPHABET = string.digits + string.ascii_letters
+
+
+def _int_to_base36(value: int) -> str:
+    """Render a non-negative integer in base 36 (reference nonce algorithm)."""
+    if value == 0:
+        return "0"
+    digits: list[str] = []
+    n = value
+    while n:
+        n, rem = divmod(n, 36)
+        digits.append(_B36_ALPHABET[rem])
+    return "".join(reversed(digits))
+
+
+def _generate_aid() -> str:
+    """Generate a client-side request nonce (hfaran ``piazza_api.nonce`` parity).
+
+    Non-cryptographic: base36 of the current unix time in milliseconds
+    followed by up to four base-36 random characters — used purely as a
+    request-correlation token until the server echoes its own ``aid``.
+    """
+    ms = int(time.time() * 1000)
+    rand_part = round(random.random() * _AID_RANDOM_SPACE)  # noqa: S311
+    return f"{_int_to_base36(ms)}{_int_to_base36(rand_part)}"
 
 
 class _AuthRetryNeededError(Exception):
@@ -357,6 +387,59 @@ class RPC:
         _check_embedded_error(raw)
         return raw
 
+    def _aid(self) -> str:
+        """Return the current request-correlation token.
+
+        Prefers the server-echoed ``aid`` captured from the most recent
+        response; falls back to a client-generated nonce (reference-client
+        behavior) before any response has been seen.
+        """
+        return self._last_aid if self._last_aid is not None else _generate_aid()
+
+    async def invoke(
+        self,
+        method: str,
+        data: dict[str, Any] | None = None,
+        *,
+        nid: str | None = None,
+        nid_key: str = "nid",
+        api: str = "logic",
+    ) -> Any:
+        """Call an arbitrary Piazza wire method (escape hatch).
+
+        Reference-client ``request()`` parity: any internal method name
+        (e.g. ``"network.get_stats"``, ``"user.status"``) can be invoked
+        with full control over the network-id key and endpoint family.
+
+        Args:
+            method: Internal Piazza API method, e.g. ``"content.get"``.
+            data: Method parameters; keys may deliberately override the
+                default network id / aid entries (reference semantics).
+            nid: Network ID override; defaults to this RPC's bound ID.
+            nid_key: Key under which the network id is sent — usually
+                ``"nid"`` but some methods expect ``"id"``.
+            api: Endpoint family — ``"logic"`` (default) or ``"main"``.
+
+        Returns:
+            The unwrapped JSON-RPC ``result`` (any shape).
+
+        Raises:
+            ValidationError: If *api* is not ``"logic"`` or ``"main"``.
+
+        Example:
+            ```python
+            # Example for invoke
+            res = await rpc.invoke('network.get_stats', {}, api='main')
+            ```
+        """
+        if api not in ("logic", "main"):
+            raise ValidationError(f"api must be 'logic' or 'main', got {api!r}")
+        resolved_nid = nid if nid is not None else self._nid
+        params: dict[str, Any] = {nid_key: resolved_nid, "aid": self._aid(), **(data or {})}
+        return await self.call(
+            f"/{api}/api", {"method": method, "params": params}, error_msg=f"{method} failed"
+        )
+
     async def _safe_call(
         self,
         endpoint: str,
@@ -461,7 +544,7 @@ class RPC:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {
             "method": "content.create",
-            "params": {**kwargs, "nid": self._nid, "aid": self._last_aid},
+            "params": {**kwargs, "nid": self._nid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to create content"
@@ -480,7 +563,7 @@ class RPC:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {
             "method": "content.update",
-            "params": {**kwargs, "nid": self._nid, "aid": self._last_aid},
+            "params": {**kwargs, "nid": self._nid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to update content"
@@ -517,12 +600,7 @@ class RPC:
         """
         payload = {
             "method": "content.mark_resolved",
-            "params": {
-                "nid": self._nid,
-                "cid": post_id,
-                "resolved": resolved,
-                "aid": self._last_aid,
-            },
+            "params": {"nid": self._nid, "cid": post_id, "resolved": resolved, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -548,7 +626,7 @@ class RPC:
                 "cid_dupe": duplicate_id,
                 "cid_to": master_id,
                 "msg": message,
-                "aid": self._last_aid,
+                "aid": self._aid(),
             },
         }
         return await self._safe_call(
@@ -589,7 +667,7 @@ class RPC:
         """
         payload = {
             "method": "content.mark_resolved",
-            "params": {"nid": self._nid, "cid": post_id, "resolved": True, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": post_id, "resolved": True, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -608,7 +686,7 @@ class RPC:
         """
         payload = {
             "method": "content.delete",
-            "params": {"nid": self._nid, "cid": post_id, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": post_id, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -706,7 +784,7 @@ class RPC:
                 "type": "i_answer" if instructor_answer else "s_answer",
                 "anonymous": "stud" if anonymous else "no",
                 "revision": revision,
-                "aid": self._last_aid,
+                "aid": self._aid(),
             },
         }
         return await self._safe_call(
@@ -730,7 +808,7 @@ class RPC:
         """
         payload = {
             "method": "content.pin",
-            "params": {"nid": self._nid, "cid": post_id, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": post_id, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg=f"Failed to pin post {post_id}"
@@ -750,7 +828,7 @@ class RPC:
         """
         payload = {
             "method": "content.unpin",
-            "params": {"nid": self._nid, "cid": post_id, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": post_id, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -769,7 +847,7 @@ class RPC:
         """
         payload = {
             "method": "content.add_feedback",
-            "params": {"nid": self._nid, "cid": post_id, "type": "tag_good", "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": post_id, "type": "tag_good", "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -788,7 +866,7 @@ class RPC:
         """
         payload = {
             "method": "content.add_tag",
-            "params": {"nid": self._nid, "cid": post_id, "tag": tag, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": post_id, "tag": tag, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -807,7 +885,7 @@ class RPC:
         """
         payload = {
             "method": "content.remove_tag",
-            "params": {"nid": self._nid, "cid": post_id, "tag": tag, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": post_id, "tag": tag, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -888,7 +966,7 @@ class RPC:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {
             "method": "network.update_user_preferences",
-            "params": {**preferences, "nid": self._nid, "aid": self._last_aid},
+            "params": {**preferences, "nid": self._nid, "aid": self._aid()},
         }
         try:
             await self._request("POST", "/logic/api", json=payload)
@@ -926,7 +1004,7 @@ class RPC:
         """
         payload = {
             "method": "content.mark_unread",
-            "params": {"nid": self._nid, "cid": post_id, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": post_id, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -949,7 +1027,7 @@ class RPC:
         """
         payload = {
             "method": "network.add_folder",
-            "params": {"nid": self._nid, "name": folder_name, "aid": self._last_aid},
+            "params": {"nid": self._nid, "name": folder_name, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -973,7 +1051,7 @@ class RPC:
         """
         payload = {
             "method": "content.add_badge",
-            "params": {"nid": self._nid, "cid": post_id, "type": badge_type, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": post_id, "type": badge_type, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -995,7 +1073,7 @@ class RPC:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {
             "method": "network.update",
-            "params": {**kwargs, "id": self._nid, "aid": self._last_aid},
+            "params": {**kwargs, "id": self._nid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -1021,7 +1099,7 @@ class RPC:
         """
         payload = {
             "method": "asset.get_upload_url",
-            "params": {"nid": self._nid, "filename": filename, "aid": self._last_aid},
+            "params": {"nid": self._nid, "filename": filename, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -1061,7 +1139,7 @@ class RPC:
                 "content": content,
                 "type": post_type,
                 "has_stale_thread": True,
-                "aid": self._last_aid,
+                "aid": self._aid(),
             },
         }
         return await self._safe_call(
@@ -1094,7 +1172,7 @@ class RPC:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {
             "method": "network.save_draft",
-            "params": {**kwargs, "nid": self._nid, "aid": self._last_aid},
+            "params": {**kwargs, "nid": self._nid, "aid": self._aid()},
         }
         # ``call`` (not ``_safe_call``) — the endpoint returns the draft
         # ID as a *bare string* result which ``_safe_call`` would coerce
@@ -1228,7 +1306,7 @@ class RPC:
     async def content_bookmark(self, cid: str) -> dict[str, Any]:
         payload = {
             "method": "content.bookmark",
-            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": cid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to bookmark"
@@ -1237,7 +1315,7 @@ class RPC:
     async def content_unbookmark(self, cid: str) -> dict[str, Any]:
         payload = {
             "method": "content.unbookmark",
-            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": cid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to unbookmark"
@@ -1246,7 +1324,7 @@ class RPC:
     async def content_mark_favorite(self, cid: str) -> dict[str, Any]:
         payload = {
             "method": "content.mark_favorite",
-            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": cid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to mark favorite"
@@ -1255,7 +1333,7 @@ class RPC:
     async def content_mark_unfavorite(self, cid: str) -> dict[str, Any]:
         payload = {
             "method": "content.mark_unfavorite",
-            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": cid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to mark unfavorite"
@@ -1264,7 +1342,7 @@ class RPC:
     async def content_view(self, cid: str) -> dict[str, Any]:
         payload = {
             "method": "content.view",
-            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": cid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to view content"
@@ -1276,7 +1354,7 @@ class RPC:
             raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
         payload = {
             "method": "content.edit",
-            "params": {**kwargs, "nid": self._nid, "cid": cid, "type": type, "aid": self._last_aid},
+            "params": {**kwargs, "nid": self._nid, "cid": cid, "type": type, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to edit content"
@@ -1285,7 +1363,7 @@ class RPC:
     async def content_cancel_edit(self, nid: str | None = None) -> dict[str, Any]:
         payload = {
             "method": "content.cancel_edit",
-            "params": {"nid": nid if nid is not None else self._nid, "aid": self._last_aid},
+            "params": {"nid": nid if nid is not None else self._nid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to cancel edit"
@@ -1294,7 +1372,7 @@ class RPC:
     async def content_remove_feedback(self, cid: str, type: str) -> dict[str, Any]:
         payload = {
             "method": "content.remove_feedback",
-            "params": {"nid": self._nid, "cid": cid, "type": type, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": cid, "type": type, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to remove feedback"
@@ -1313,7 +1391,7 @@ class RPC:
                 "revision": revision,
                 "editor": editor,
                 "network_id": self._nid,
-                "aid": self._last_aid,
+                "aid": self._aid(),
             },
         }
         return await self._safe_call(
@@ -1323,7 +1401,7 @@ class RPC:
     async def network_del_item(self, cid: str) -> dict[str, Any]:
         payload = {
             "method": "network.del_item",
-            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+            "params": {"nid": self._nid, "cid": cid, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api",
@@ -1346,7 +1424,7 @@ class RPC:
     async def network_get_users(self, ids: list[str]) -> dict[str, Any]:
         payload = {
             "method": "network.get_users",
-            "params": {"nid": self._nid, "ids": ids, "aid": self._last_aid},
+            "params": {"nid": self._nid, "ids": ids, "aid": self._aid()},
         }
         return await self._safe_call(
             "/logic/api", payload, error_cls=NetworkError, error_msg="Failed to get specific users"

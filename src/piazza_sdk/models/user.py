@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class User(BaseModel):
@@ -66,6 +66,22 @@ class User(BaseModel):
             List of network IDs matching the given role.
         """
         return [nid for nid, r in self.class_roles.items() if r == role]
+
+    @field_validator("all_classes", mode="before")
+    @classmethod
+    def _parse_all_classes(cls, v: Any) -> list[dict[str, Any]]:
+        """Safely convert a dict of classes to a list of dicts."""
+        if isinstance(v, dict):
+            entries = []
+            for nid, value in v.items():
+                if isinstance(value, dict):
+                    item = dict(value)
+                    item.setdefault("nid", nid)
+                    entries.append(item)
+            return entries
+        if isinstance(v, list):
+            return [item for item in v if isinstance(item, dict)]
+        return []
 
 
 class UserPreferences(BaseModel):

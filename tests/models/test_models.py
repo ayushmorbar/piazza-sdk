@@ -154,25 +154,15 @@ class TestPostModel:
         post = Post(id="p1", title="Title", raw={"is_tag_good": True})
         assert post.is_upvoted is True
 
-    def test_is_upvoted_true_from_tag_endorse(self):
-        """is_upvoted returns True when is_tag_endorse is set."""
-        post = Post(id="p1", title="Title", raw={"is_tag_endorse": True})
-        assert post.is_upvoted is True
-
     def test_is_upvoted_false_when_neither_set(self):
         """is_upvoted returns False when neither tag is set."""
         post = Post(id="p1", title="Title", raw={})
         assert post.is_upvoted is False
 
-    def test_is_upvoted_false_when_both_false(self):
-        """is_upvoted returns False when both tags are False."""
-        post = Post(id="p1", title="Title", raw={"is_tag_good": False, "is_tag_endorse": False})
+    def test_is_upvoted_false_when_false(self):
+        """is_upvoted returns False when tag is False."""
+        post = Post(id="p1", title="Title", raw={"is_tag_good": False})
         assert post.is_upvoted is False
-
-    def test_is_upvoted_both_true(self):
-        """is_upvoted returns True when both tags are set."""
-        post = Post(id="p1", title="Title", raw={"is_tag_good": True, "is_tag_endorse": True})
-        assert post.is_upvoted is True
 
     def test_post_revision_model(self):
         rev = PostRevision(

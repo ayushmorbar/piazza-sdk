@@ -192,6 +192,15 @@ class Child(BaseModel):
     uid_unique: str | None = Field(
         default=None, description="Unique registration identifier for the user"
     )
+    is_tag_endorse: bool = Field(
+        default=False, description="Whether current user endorsed this answer"
+    )
+    tag_endorse: list[dict[str, Any]] = Field(
+        default_factory=list, description="List of users who endorsed this answer"
+    )
+    tag_endorse_arr: list[str] = Field(
+        default_factory=list, description="List of user IDs who endorsed this answer"
+    )
 
 
 class Answer(BaseModel):
@@ -499,9 +508,7 @@ class Post(BaseModel):
     def is_upvoted(self) -> bool:
         """Whether the current user has upvoted this post.
 
-        Mirrors the Node.js reference ``upvoted`` field which combines
-        ``is_tag_good`` (student upvote) and ``is_tag_endorse``
-        (instructor badge) from the live API response.
+        Checks the ``is_tag_good`` field from the live API response.
 
         Example:
             ```python
@@ -511,12 +518,12 @@ class Post(BaseModel):
             post = await network.get_post("cl7k3x2f5")
 
             if post.is_upvoted:
-                print(f"You have endorsed '{post.title}'")
+                print(f"You have upvoted '{post.title}'")
             else:
-                print("You have not endorsed this post yet")
+                print("You have not upvoted this post yet")
             ```
         """
-        return bool(self.raw.get("is_tag_good")) or bool(self.raw.get("is_tag_endorse"))
+        return bool(self.raw.get("is_tag_good"))
 
     def normalized(self) -> Post:
         """Return a new Post with HTML content normalized to Markdown.

@@ -15,6 +15,11 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.MM.DD`).
 - Fixed `domain/posts.py` `__all__` — now exports all 26 domain functions (was missing 9 + the new `unresolve_post`).
 - Enriched docstrings with runnable ```` ```python ```` code examples for `resolve_post`, `unresolve_post`, `is_upvoted`, `content_mark_resolved`, and `content_resolve`.
 - Live verification: `test_dual_role_complete_lifecycle` now exercises `unresolve_post` and `is_upvoted` against the real Piazza API.
+- Extensive HAR forensic parity alignments across data models:
+  - `Child` model expanded to track answer-level endorsements (`is_tag_endorse`, `tag_endorse`, `tag_endorse_arr`).
+  - `FeedItem` model now tracks answer presence booleans (`has_i` for instructor, `has_s` for student).
+  - 6 newly typed feed filter subclasses added: `UnansweredFilter`, `UnresolvedFilter`, `HideGroupPostsFilter`, `InstructorsFilter`, `MyPostsFilter`, `DueFilter`.
+  - `User` model now strictly auto-coerces `all_classes` network ID dictionary payloads to standardized `list[dict]`.
 
 ## [2026.08.24.2] - 2026-08-24
 

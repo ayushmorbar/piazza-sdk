@@ -100,6 +100,8 @@ class FeedItem(BaseModel):
     )
     stat: FeedItemStat | None = Field(default=None, description="Feed item statistics")
     folder_num: int = Field(default=0, description="Folder number")
+    has_i: bool | None = Field(default=None, description="Whether post has instructor answer")
+    has_s: bool | None = Field(default=None, description="Whether post has student answer")
 
     @property
     def is_question(self) -> bool:
@@ -170,6 +172,66 @@ class FolderFilter(FeedFilter):
     def to_kwargs(self) -> dict[str, Any]:
         """Return ``{"folder": True, "filter_folder": name}`` parameters."""
         return {"folder": True, "filter_folder": self.folder_name}
+
+
+class UnansweredFilter(FeedFilter):
+    """Filter feed to show unanswered posts."""
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    def to_kwargs(self) -> dict[str, Any]:
+        """Return ``{"unanswered": 1}`` for the unanswered filter."""
+        return {"unanswered": 1}
+
+
+class UnresolvedFilter(FeedFilter):
+    """Filter feed to show unresolved posts."""
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    def to_kwargs(self) -> dict[str, Any]:
+        """Return ``{"unresolved": 1}`` for the unresolved filter."""
+        return {"unresolved": 1}
+
+
+class HideGroupPostsFilter(FeedFilter):
+    """Filter feed to hide group posts."""
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    def to_kwargs(self) -> dict[str, Any]:
+        """Return ``{"hide_group_posts": 1}`` for the hide group posts filter."""
+        return {"hide_group_posts": 1}
+
+
+class InstructorsFilter(FeedFilter):
+    """Filter feed to show instructor posts."""
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    def to_kwargs(self) -> dict[str, Any]:
+        """Return ``{"instructors": 1}`` for the instructors filter."""
+        return {"instructors": 1}
+
+
+class MyPostsFilter(FeedFilter):
+    """Filter feed to show the current user's posts."""
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    def to_kwargs(self) -> dict[str, Any]:
+        """Return ``{"my_posts": 1}`` for the my posts filter."""
+        return {"my_posts": 1}
+
+
+class DueFilter(FeedFilter):
+    """Filter feed to show due posts."""
+
+    model_config = ConfigDict(slots=True, extra="forbid")  # type: ignore[typeddict-unknown-key]
+
+    def to_kwargs(self) -> dict[str, Any]:
+        """Return ``{"due": 1}`` for the due filter."""
+        return {"due": 1}
 
 
 class SearchFilter(FeedFilter):

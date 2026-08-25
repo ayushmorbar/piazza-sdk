@@ -871,7 +871,11 @@ class RPC:
         }
         try:
             await self._request("POST", "/logic/api", json=payload)
-        except PiazzaSDKError as exc:
+        except PiazzaSDKError:
+            # Typed SDK errors propagate untouched so callers keep
+            # attributes like status_code and retry_after_ms.
+            raise
+        except Exception as exc:
             raise UserError(f"Failed to update user preferences: {exc}") from exc
 
     async def user_status(self) -> dict[str, Any]:
@@ -1166,49 +1170,76 @@ class RPC:
         )
 
     async def content_bookmark(self, cid: str) -> dict[str, Any]:
-        payload = {"method": "content.bookmark", "params": {"cid": cid}}
+        payload = {
+            "method": "content.bookmark",
+            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to bookmark"
         )
 
     async def content_unbookmark(self, cid: str) -> dict[str, Any]:
-        payload = {"method": "content.unbookmark", "params": {"cid": cid}}
+        payload = {
+            "method": "content.unbookmark",
+            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to unbookmark"
         )
 
     async def content_mark_favorite(self, cid: str) -> dict[str, Any]:
-        payload = {"method": "content.mark_favorite", "params": {"cid": cid}}
+        payload = {
+            "method": "content.mark_favorite",
+            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to mark favorite"
         )
 
     async def content_mark_unfavorite(self, cid: str) -> dict[str, Any]:
-        payload = {"method": "content.mark_unfavorite", "params": {"cid": cid}}
+        payload = {
+            "method": "content.mark_unfavorite",
+            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to mark unfavorite"
         )
 
     async def content_view(self, cid: str) -> dict[str, Any]:
-        payload = {"method": "content.view", "params": {"cid": cid}}
+        payload = {
+            "method": "content.view",
+            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to view content"
         )
 
     async def content_edit(self, cid: str, type: str, **kwargs: Any) -> dict[str, Any]:
-        payload = {"method": "content.edit", "params": {"cid": cid, "type": type, **kwargs}}
+        blocked = _BLOCKED_KEYS & kwargs.keys()
+        if blocked:
+            raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
+        payload = {
+            "method": "content.edit",
+            "params": {**kwargs, "nid": self._nid, "cid": cid, "type": type, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to edit content"
         )
 
-    async def content_cancel_edit(self, nid: str) -> dict[str, Any]:
-        payload = {"method": "content.cancel_edit", "params": {"nid": nid}}
+    async def content_cancel_edit(self, nid: str | None = None) -> dict[str, Any]:
+        payload = {
+            "method": "content.cancel_edit",
+            "params": {"nid": nid if nid is not None else self._nid, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to cancel edit"
         )
 
     async def content_remove_feedback(self, cid: str, type: str) -> dict[str, Any]:
-        payload = {"method": "content.remove_feedback", "params": {"cid": cid, "type": type}}
+        payload = {
+            "method": "content.remove_feedback",
+            "params": {"nid": self._nid, "cid": cid, "type": type, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api", payload, error_cls=ContentError, error_msg="Failed to remove feedback"
         )
@@ -1219,12 +1250,14 @@ class RPC:
         payload = {
             "method": "content.auto_save",
             "params": {
+                "nid": self._nid,
                 "cid": cid,
                 "type": type,
                 "body": body,
                 "revision": revision,
                 "editor": editor,
                 "network_id": self._nid,
+                "aid": self._last_aid,
             },
         }
         return await self._safe_call(
@@ -1232,7 +1265,10 @@ class RPC:
         )
 
     async def network_del_item(self, cid: str) -> dict[str, Any]:
-        payload = {"method": "network.del_item", "params": {"cid": cid}}
+        payload = {
+            "method": "network.del_item",
+            "params": {"nid": self._nid, "cid": cid, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api",
             payload,
@@ -1252,7 +1288,10 @@ class RPC:
         )
 
     async def network_get_users(self, ids: list[str]) -> dict[str, Any]:
-        payload = {"method": "network.get_users", "params": {"nid": self._nid, "ids": ids}}
+        payload = {
+            "method": "network.get_users",
+            "params": {"nid": self._nid, "ids": ids, "aid": self._last_aid},
+        }
         return await self._safe_call(
             "/logic/api", payload, error_cls=NetworkError, error_msg="Failed to get specific users"
         )

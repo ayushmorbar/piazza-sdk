@@ -639,6 +639,15 @@ class TestRPCUpdateUserPreferences:
         with pytest.raises(PiazzaSDKError, match="Reserved keys"):
             await rpc.update_user_preferences({"action": "override"})
 
+    async def test_update_user_preferences_preserves_sdk_error_attrs(self):
+        """Regression: RateLimitError must keep retry_after_ms (no re-wrap)."""
+        rpc = _make_rpc(_make_session(_mock_client(429, {}, headers={"Retry-After": "7"})))
+
+        with pytest.raises(RateLimitError) as exc_info:
+            await rpc.update_user_preferences({"theme": "dark"})
+        assert exc_info.value.retry_after_ms == 7000
+        assert exc_info.value.status_code == 429
+
 
 class TestRPCMarkAsUnread:
     async def test_mark_as_unread(self):
@@ -890,3 +899,84 @@ class TestConfigValidator:
         assert cfg.throttle_min_delay == 1.0
         assert cfg.throttle_max_delay == 3.0
         assert cfg.throttle_idle_timeout == 30.0
+
+
+# ---------------------------------------------------------------------------
+# Network-scoped payload normalization (nid/aid on every network call)
+# ---------------------------------------------------------------------------
+
+
+class TestNetworkScopedPayloadShapes:
+    """Every network-scoped RPC carries nid + aid, matching legacy methods."""
+
+    @staticmethod
+    def _rpc_with_aid() -> tuple[RPC, MagicMock]:
+        rpc = _make_rpc(_make_session(_mock_client(200, {})))
+        rpc._last_aid = "aid-token-1"
+        return rpc
+
+    @staticmethod
+    def _sent_payload(rpc: RPC) -> dict[str, Any]:
+        call = rpc._session.client.request.await_args
+        return call.kwargs["json"]["params"]
+
+    @pytest.mark.parametrize(
+        ("invoke", "expected"),
+        [
+            (
+                lambda r: r.content_bookmark("c1"),
+                {"nid": "test_nid", "cid": "c1", "aid": "aid-token-1"},
+            ),
+            (
+                lambda r: r.content_unbookmark("c1"),
+                {"nid": "test_nid", "cid": "c1", "aid": "aid-token-1"},
+            ),
+            (
+                lambda r: r.content_mark_favorite("c2"),
+                {"nid": "test_nid", "cid": "c2", "aid": "aid-token-1"},
+            ),
+            (
+                lambda r: r.content_mark_unfavorite("c2"),
+                {"nid": "test_nid", "cid": "c2", "aid": "aid-token-1"},
+            ),
+            (
+                lambda r: r.content_view("c3"),
+                {"nid": "test_nid", "cid": "c3", "aid": "aid-token-1"},
+            ),
+            (
+                lambda r: r.content_edit("c4", "note"),
+                {"nid": "test_nid", "cid": "c4", "type": "note", "aid": "aid-token-1"},
+            ),
+            (lambda r: r.content_cancel_edit(), {"nid": "test_nid", "aid": "aid-token-1"}),
+            (lambda r: r.content_cancel_edit("other"), {"nid": "other", "aid": "aid-token-1"}),
+            (
+                lambda r: r.content_remove_feedback("c5", "tag_good"),
+                {"nid": "test_nid", "cid": "c5", "type": "tag_good", "aid": "aid-token-1"},
+            ),
+            (
+                lambda r: r.content_auto_save("c6", "note", "<p>x</p>", 2, "rte"),
+                {
+                    "nid": "test_nid",
+                    "cid": "c6",
+                    "type": "note",
+                    "body": "<p>x</p>",
+                    "revision": 2,
+                    "editor": "rte",
+                    "network_id": "test_nid",
+                    "aid": "aid-token-1",
+                },
+            ),
+            (
+                lambda r: r.network_del_item("c7"),
+                {"nid": "test_nid", "cid": "c7", "aid": "aid-token-1"},
+            ),
+            (
+                lambda r: r.network_get_users(["u1"]),
+                {"nid": "test_nid", "ids": ["u1"], "aid": "aid-token-1"},
+            ),
+        ],
+    )
+    async def test_payload_carries_nid_and_aid(self, invoke, expected):
+        rpc = self._rpc_with_aid()
+        await invoke(rpc)
+        assert self._sent_payload(rpc) == expected

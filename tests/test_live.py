@@ -640,3 +640,47 @@ async def test_live_post_iter_content():
 
         urls = extract_urls("\n".join(bodies))
         logger.info("✓ extract_urls found %d links: %s", len(urls), urls[:5])
+
+
+# ── Phase 5 LIVE verification: normalized payload round-trip ───────────
+
+
+@live
+@requires_instructor_creds
+@pytest.mark.asyncio
+async def test_live_normalized_payload_roundtrip():
+    """Live verify: nid+aid-normalized payloads are accepted end-to-end.
+
+    Bookmarks a real post, asserts the flag via content.get, unbookmarks,
+    and asserts reversion — proving the Phase 5 payload normalization
+    matches the live wire contract.
+    """
+    config = PiazzaConfig(course_id=COURSE_ID)
+    async with SessionStateManager(config) as session:
+        await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        rpc = RPC(session=session, base_url=config.base_url, network_id=COURSE_ID)
+        network = Network(rpc, COURSE_ID)
+
+        feed = await network.get_feed(limit=3)
+        pid = feed.feed[0].id
+
+        view = await rpc.content_view(pid)
+        assert isinstance(view, dict)
+
+        await rpc.content_bookmark(pid)
+        post = await network.get_post(pid)
+        assert post.is_bookmarked is True, "bookmark not visible on live read-back"
+        logger.info("✓ bookmark (nid+aid) visible on live read-back")
+
+        await rpc.content_unbookmark(pid)
+        post = await network.get_post(pid)
+        assert post.is_bookmarked is False, "unbookmark not visible on live read-back"
+        logger.info("✓ unbookmark reverted state on live read-back")
+
+        fav = await rpc.content_mark_favorite(pid)
+        assert isinstance(fav, dict)
+        unfav = await rpc.content_mark_unfavorite(pid)
+        assert isinstance(unfav, dict)
+        ce = await rpc.content_cancel_edit()
+        assert isinstance(ce, dict)
+        logger.info("✓ favorite/unfavorite/cancel_edit all accepted")

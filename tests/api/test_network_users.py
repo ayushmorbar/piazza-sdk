@@ -15,7 +15,7 @@ import pytest
 from piazza_sdk.api.network import Network
 from piazza_sdk.exceptions import FeedError
 from piazza_sdk.models.enums import FeedItemDefaultAnonymity, FeedItemType
-from piazza_sdk.models.feed import Feed, FeedItem
+from piazza_sdk.models.feed import Feed, FeedItem, FolderFilter, FollowingFilter, UnreadFilter
 from piazza_sdk.models.network import HallOfFameItem, Statistics
 from piazza_sdk.models.user import User
 
@@ -153,3 +153,59 @@ class TestGetHallOfFame:
 
 
 # ── Async iterators ───────────────────────────────────────────────────
+
+
+class TestIterUsers:
+    @pytest.mark.asyncio
+    async def test_yields_each_user(self) -> None:
+        net = _make_network()
+        users = [User(id="u1", name="Alice"), User(id="u2", name="Bob")]
+        with patch.object(net, "get_users_by_ids", new_callable=AsyncMock, return_value=users):
+            collected = [u async for u in net.iter_users(["u1", "u2"])]
+        assert len(collected) == 2
+        assert collected[0].id == "u1"
+        assert collected[1].id == "u2"
+
+    @pytest.mark.asyncio
+    async def test_empty_list_yields_nothing(self) -> None:
+        net = _make_network()
+        with patch.object(net, "get_users_by_ids", new_callable=AsyncMock, return_value=[]):
+            collected = [u async for u in net.iter_users([])]
+        assert collected == []
+
+
+class TestIterAllUsers:
+    @pytest.mark.asyncio
+    async def test_yields_each_user(self) -> None:
+        net = _make_network()
+        users = [User(id="u1", name="Alice"), User(id="u2", name="Bob"), User(id="u3")]
+        with patch.object(net, "get_users", new_callable=AsyncMock, return_value=users):
+            collected = [u async for u in net.iter_all_users()]
+        assert len(collected) == 3
+        assert collected[2].id == "u3"
+
+    @pytest.mark.asyncio
+    async def test_empty_users_yields_nothing(self) -> None:
+        net = _make_network()
+        with patch.object(net, "get_users", new_callable=AsyncMock, return_value=[]):
+            collected = [u async for u in net.iter_all_users()]
+        assert collected == []
+
+
+# ── Feed filters property ─────────────────────────────────────────────
+
+
+class TestFeedFilters:
+    def test_returns_namespace_with_three_filters(self) -> None:
+        net = _make_network()
+        ff = net.feed_filters
+        assert hasattr(ff, "unread")
+        assert hasattr(ff, "following")
+        assert hasattr(ff, "folder")
+
+    def test_filter_classes_are_correct_types(self) -> None:
+        net = _make_network()
+        ff = net.feed_filters
+        assert ff.unread is UnreadFilter
+        assert ff.following is FollowingFilter
+        assert ff.folder is FolderFilter

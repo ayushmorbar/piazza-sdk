@@ -49,7 +49,14 @@ from piazza_sdk.domain.users import get_all_users as _domain_get_all_users
 from piazza_sdk.domain.users import get_instructor_stats as _domain_get_instructor_stats
 from piazza_sdk.domain.users import get_online_users as _domain_get_online_users
 from piazza_sdk.exceptions import FeedError, NotFoundError, PiazzaSDKError, ValidationError
-from piazza_sdk.models.feed import Feed, FeedFilter, FeedItem, FolderFilter
+from piazza_sdk.models.feed import (
+    Feed,
+    FeedFilter,
+    FeedItem,
+    FolderFilter,
+    FollowingFilter,
+    UnreadFilter,
+)
 from piazza_sdk.models.network import HallOfFameItem, NetworkInfo, Statistics
 from piazza_sdk.models.post import (
     AssetUploadResponse,
@@ -90,6 +97,28 @@ class Network:
         """Refresh the session if expired."""
         if self._session is not None and self._session.needs_refresh:
             await self._session.refresh()
+
+    @property
+    def feed_filters(self) -> Any:
+        """Namedtuple-like accessor for feed filter classes.
+
+        Returns an object with ``unread``, ``following``, and ``folder``
+        attributes mapping to the corresponding :class:`FeedFilter`
+        subclasses for use with :meth:`get_filtered_feed`.
+
+        Returns:
+            Namespace with unread, following, folder filter classes.
+
+        Example:
+            ```python
+            # Example for feed_filters
+            f = network.feed_filters
+            feed = await network.get_filtered_feed(f.unread())
+            ```
+        """
+        from types import SimpleNamespace  # noqa: PLC0415
+
+        return SimpleNamespace(unread=UnreadFilter, following=FollowingFilter, folder=FolderFilter)
 
     # ── Network info & capabilities ───────────────────────────────────
 
@@ -1024,6 +1053,46 @@ class Network:
         """
         await self._ensure_session()
         return await _domain_get_all_users(self._rpc)
+
+    async def iter_users(self, user_ids: list[str]) -> AsyncGenerator[User, None]:
+        """Iterate over specific users by ID, yielding one at a time.
+
+        Like :meth:`get_users_by_ids` but yields each user individually,
+        which can be more memory-efficient for large lists.
+
+        Args:
+            user_ids: List of user ID strings.
+
+        Yields:
+            Individual User model instances.
+
+        Example:
+            ```python
+            async for user in network.iter_users(["abc123", "def456"]):
+                print(user.name)
+            ```
+        """
+        users = await self.get_users_by_ids(user_ids)
+        for user in users:
+            yield user
+
+    async def iter_all_users(self) -> AsyncGenerator[User, None]:
+        """Iterate over all users in the network, yielding one at a time.
+
+        Like :meth:`get_users` but yields each user individually.
+
+        Yields:
+            Individual User model instances.
+
+        Example:
+            ```python
+            async for user in network.iter_all_users():
+                print(user.name)
+            ```
+        """
+        users = await self.get_users()
+        for user in users:
+            yield user
 
     async def get_instructor_stats(self) -> dict[str, Any]:
         """Get instructor-specific statistics for this network.

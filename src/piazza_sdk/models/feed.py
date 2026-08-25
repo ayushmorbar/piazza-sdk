@@ -95,6 +95,21 @@ class FeedItem(BaseModel):
     content_snippet: str | None = Field(
         default=None, alias="content_snipet", description="Short content preview"
     )
+    d_bucket: str | None = Field(
+        default=None, alias="d-bucket", description="Date bucket (e.g. Yesterday)"
+    )
+    feed_groups: list[dict[str, Any]] = Field(
+        default_factory=list, description="Feed group categorization data"
+    )
+    gd: int | None = Field(default=None, description="Good question count")
+    gd_a: int | None = Field(default=None, description="Good answer count")
+    gd_f: int | None = Field(default=None, description="Good followup count")
+    tag_endorse_prof: bool | None = Field(
+        default=None, description="Whether endorsed by instructor"
+    )
+    tag_good_prof: bool | None = Field(default=None, description="Whether marked good by professor")
+    is_new: bool = Field(default=False, description="Whether feed item is new")
+    view_adjust: int | None = Field(default=None, description="View count adjustment token")
     log: list[dict[str, Any]] = Field(
         default_factory=list, alias="change_log", description="Change log entries"
     )

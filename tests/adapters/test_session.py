@@ -5,11 +5,12 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 from httpx import Request, Response
 
 from piazza_sdk.adapters.auth import SessionState
-from piazza_sdk.adapters.session import SessionStateManager
+from piazza_sdk.adapters.session import SessionStateManager, _parse_login_error
 from piazza_sdk.config import PiazzaConfig
 from piazza_sdk.exceptions import AuthenticationError, SessionClosedError
 
@@ -144,3 +145,115 @@ class TestSessionStateManagerProtocols:
 
         result = await mgr.is_session_alive()
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Login hardening: dedicated CSRF endpoint + inline ERROR_MSG surfacing
+# ---------------------------------------------------------------------------
+
+
+class TestFetchCsrfToken:
+    """CSRF acquisition: /main/csrf_token endpoint first, page scrape fallback."""
+
+    def _manager(self) -> SessionStateManager:
+        config = PiazzaConfig(course_id="test_course")
+        return SessionStateManager(config)
+
+    @pytest.mark.asyncio
+    async def test_endpoint_token_preferred(self):
+        mgr = self._manager()
+        endpoint_resp = Response(
+            200, text='window.CSRF_TOKEN = "' + "a" * 40 + '";', request=Request("GET", "x")
+        )
+        page_resp = Response(200, text="<html></html>", request=Request("GET", "y"))
+        mgr._client = AsyncMock()
+        mgr._client.get = AsyncMock(side_effect=[endpoint_resp, page_resp])
+
+        token = await mgr._fetch_csrf_token()
+        assert token == "a" * 40
+        assert mgr._client.get.await_count == 1  # fallback page never fetched
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_page_scrape(self):
+        mgr = self._manager()
+        endpoint_resp = Response(200, text="Not Found", request=Request("GET", "x"))
+        page_html = '<meta name="csrf-token" content="' + "b" * 32 + '">'
+        page_resp = Response(200, text=page_html, request=Request("GET", "https://y"))
+        mgr._client = AsyncMock()
+        mgr._client.get = AsyncMock(side_effect=[endpoint_resp, page_resp])
+
+        token = await mgr._fetch_csrf_token()
+        assert token == "b" * 32
+        assert mgr._client.get.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_endpoint_network_error_falls_back(self):
+        mgr = self._manager()
+        page_html = '<meta name="csrf-token" content="' + "c" * 32 + '">'
+        page_resp = Response(200, text=page_html, request=Request("GET", "y"))
+        mgr._client = AsyncMock()
+
+        async def _get(url: str, **kwargs: object) -> Response:
+            if "/main/csrf_token" in str(url):
+                raise httpx.ConnectError("boom")
+            return page_resp
+
+        mgr._client.get = AsyncMock(side_effect=_get)
+        assert await mgr._fetch_csrf_token() == "c" * 32
+
+    @pytest.mark.asyncio
+    async def test_endpoint_short_token_rejected_then_fallback(self):
+        mgr = self._manager()
+        endpoint_resp = Response(
+            200, text='window.CSRF_TOKEN = "tiny";', request=Request("GET", "x")
+        )
+        page_resp = Response(200, text="", request=Request("GET", "y"))
+        mgr._client = AsyncMock()
+        mgr._client.get = AsyncMock(side_effect=[endpoint_resp, page_resp])
+        assert await mgr._fetch_csrf_token() is None
+
+
+class TestParseLoginError:
+    """Inline ERROR_MSG extraction from failed-login HTML."""
+
+    def test_extracts_quoted_message(self):
+        html = '<script>var ERROR_MSG = "Incorrect email/password";</script>'
+
+        assert _parse_login_error(html) == "Incorrect email/password"
+
+    def test_returns_none_when_absent(self):
+
+        assert _parse_login_error("<html>ok</html>") is None
+
+    def test_empty_message_is_none(self):
+
+        assert _parse_login_error('var ERROR_MSG = "";') is None
+
+    def test_malformed_assignment_is_none(self):
+
+        assert _parse_login_error("var ERROR_MSG") is None
+
+
+class TestLoginErrorSurfacing:
+    """Failed logins surface the server's inline message."""
+
+    @pytest.mark.asyncio
+    async def test_bad_credentials_raise_server_message(self):
+        mgr = SessionStateManager(PiazzaConfig(course_id="test_course"))
+        csrf_resp = Response(
+            200, text='window.CSRF_TOKEN = "' + "t" * 40 + '";', request=Request("GET", "x")
+        )
+        login_resp = Response(
+            200,
+            text='<script>var ERROR_MSG = "Incorrect email or password";</script>',
+            request=Request("POST", "x"),
+        )
+        mgr._state = SessionState.AUTHENTICATING
+        mgr._client = AsyncMock()
+        mgr._client.get = AsyncMock(return_value=csrf_resp)
+        mgr._client.post = AsyncMock(return_value=login_resp)
+        mgr._client.cookies.items.return_value = []
+
+        with pytest.raises(AuthenticationError, match="Incorrect email or password"):
+            await mgr.login("a@b.com", "wrong")
+        assert mgr._state == SessionState.UNAUTHENTICATED

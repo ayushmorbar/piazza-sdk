@@ -27,6 +27,37 @@ logger = logging.getLogger(__name__)
 # Default heartbeat interval (seconds) — spec recommends 300s
 _DEFAULT_HEARTBEAT_INTERVAL: float = 300.0
 
+# Dedicated CSRF endpoint (reference client login fix): returns a JS
+# assignment such as ``window.CSRF_TOKEN = "...";``
+_CSRF_ENDPOINT_PATH: str = "/main/csrf_token"
+_CSRF_RESPONSE_MARKER: str = "CSRF_TOKEN"
+
+# Inline login-failure marker: failed logins return HTTP 200 with a JS
+# assignment like ``var ERROR_MSG = "Incorrect email/password";``
+_ERROR_MSG_MARKER: str = "VAR ERROR_MSG"
+
+
+def _parse_login_error(html: str) -> str | None:
+    """Extract Piazza's inline login error message from response HTML.
+
+    Args:
+        html: Raw HTML body of the login POST response.
+
+    Returns:
+        The server-supplied error text, or ``None`` when the response
+        carries no inline error assignment.
+    """
+    pos = html.upper().find(_ERROR_MSG_MARKER)
+    if pos == -1:
+        return None
+    end = html[pos:].find(";")
+    fragment = html[pos : pos + end].translate({34: None})  # strip double quotes
+    parts = fragment.split("=", 1)
+    if len(parts) < 2:
+        return None
+    message = parts[1].strip()
+    return message or None
+
 
 class SessionStateManager:
     """Manages the authenticated HTTP session with Piazza.
@@ -160,11 +191,9 @@ class SessionStateManager:
         self._password = password
 
         try:
-            # Stage 1: Fetch login page to get CSRF token and _piazza_s cookie
-            login_headers = self._default_headers()
-            login_headers["Referer"] = self.config.login_page_url
-            login_page = await self.client.get(self.config.login_page_url, headers=login_headers)
-            csrf_token = self._extract_csrf_token(login_page.text)
+            # Stage 1: Acquire a CSRF token — dedicated endpoint first,
+            # login-page scrape as fallback.
+            csrf_token = await self._fetch_csrf_token()
 
             if csrf_token is None or len(csrf_token) < _MIN_CSRF_TOKEN_LENGTH:
                 self._state = SessionState.UNAUTHENTICATED
@@ -204,11 +233,48 @@ class SessionStateManager:
             self._state = SessionState.UNAUTHENTICATED
             raise AuthenticationError(f"Network error during login: {exc}") from exc
 
+    async def _fetch_csrf_token(self) -> str | None:
+        """Acquire a CSRF token via the dedicated endpoint, page scrape as fallback.
+
+        Piazza exposes ``GET /main/csrf_token`` returning a JavaScript
+        assignment (e.g. ``window.CSRF_TOKEN = "...";``). When that
+        endpoint is unavailable or malformed, fall back to scraping the
+        login page's ``<meta name="csrf-token">`` tag (legacy path).
+
+        Returns:
+            The CSRF token string, or ``None`` when both strategies fail.
+        """
+        endpoint = f"{self.config.base_url}{_CSRF_ENDPOINT_PATH}"
+        headers = self._default_headers()
+        headers["Referer"] = self.config.login_page_url
+        try:
+            response = await self.client.get(endpoint, headers=headers)
+            if _CSRF_RESPONSE_MARKER in response.text.upper():
+                token = response.text.translate({34: None, 59: None}).split("=")[1].strip()
+                if token and len(token) >= _MIN_CSRF_TOKEN_LENGTH:
+                    logger.debug("CSRF token acquired from dedicated endpoint")
+                    return token
+                logger.warning("CSRF endpoint returned a token that failed validation")
+        except httpx.HTTPError as exc:
+            logger.info("CSRF endpoint fetch failed (%s); falling back to page scrape", exc)
+
+        # Fallback: scrape the login page HTML (legacy strategy).
+        login_page = await self.client.get(self.config.login_page_url, headers=headers)
+        logger.debug("CSRF token scraped from login page HTML")
+        return self._extract_csrf_token(login_page.text)
+
     async def _finish_login(self, response: httpx.Response, csrf_token: str) -> None:
         """Validate login response and persist session state."""
         if response.status_code != 200:
             self._state = SessionState.UNAUTHENTICATED
             raise AuthenticationError(f"Login failed with status {response.status_code}")
+
+        # Piazza returns HTTP 200 even on bad credentials, embedding the
+        # reason as an inline JS assignment — surface it verbatim.
+        server_error = _parse_login_error(response.text)
+        if server_error:
+            self._state = SessionState.UNAUTHENTICATED
+            raise AuthenticationError(f"Could not authenticate: {server_error}")
 
         # Sync httpx cookies into our CookieJar before persisting
         assert self._client is not None  # noqa: S101 - guaranteed non-None after login

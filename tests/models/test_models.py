@@ -25,6 +25,7 @@ from piazza_sdk.models.feed import (
 from piazza_sdk.models.network import HallOfFameItem, NetworkInfo
 from piazza_sdk.models.post import (
     ChangeLogEntry,
+    Child,
     Post,
     PostCreatedResponse,
     PostRevision,
@@ -403,3 +404,109 @@ class TestNetworkAndUserModels:
         assert prefs.digest_frequency == "daily"
         assert prefs.digest_hour == 9
         assert prefs.email_new_post is True
+
+
+# ==============================================================================
+# Post.iter_content Tests (tree walk)
+# ==============================================================================
+
+
+class TestPostIterContent:
+    """Tests for Post.iter_content recursive tree traversal."""
+
+    @staticmethod
+    def _child(cid: str, body: str, children: list[Child] | None = None) -> Child:
+        return Child(
+            id=cid,
+            type="followup",
+            content=body,
+            revisions=[PostRevision(revision=1, subject=cid, content=body)],
+            children=children or [],
+        )
+
+    def test_single_post_history(self):
+        post = Post(
+            id="p1",
+            title="t",
+            revisions=[
+                PostRevision(revision=1, subject="v1", content="first"),
+                PostRevision(revision=2, subject="v2", content="second"),
+            ],
+        )
+        assert list(post.iter_content()) == ["first", "second"]
+
+    def test_nested_tree_depth_first_order(self):
+        deep = self._child("c3", "reply-body")
+        mid = self._child("c2", "answer-body", children=[deep])
+        post = Post(
+            id="p",
+            title="t",
+            revisions=[PostRevision(revision=1, subject="s", content="post-body")],
+            children=[self._child("c1", "followup-body"), mid],
+        )
+        # DFS: root first, then children in document order, then nested.
+        assert list(post.iter_content()) == [
+            "post-body",
+            "followup-body",
+            "answer-body",
+            "reply-body",
+        ]
+
+    def test_empty_revisions_skipped_but_children_walked(self):
+        child = self._child("c1", "kid")
+        post = Post(
+            id="p",
+            title="t",
+            revisions=[PostRevision(revision=1, subject="s", content="")],
+            children=[child],
+        )
+        assert list(post.iter_content()) == ["kid"]
+
+    def test_childless_empty_post(self):
+        assert list(Post(id="p", title="t").iter_content()) == []
+
+    def test_child_with_flat_content_fallback(self):
+        """Children usually carry bodies in flat ``content``, not history."""
+        child = Child(id="c1", type="followup", content="flat-body")
+        post = Post(
+            id="p",
+            title="t",
+            revisions=[PostRevision(revision=1, subject="s", content="root")],
+            children=[child],
+        )
+        assert list(post.iter_content()) == ["root", "flat-body"]
+
+    def test_history_preferred_over_flat_content(self):
+        child = Child(
+            id="c1",
+            type="followup",
+            content="stale-flat",
+            revisions=[PostRevision(revision=1, subject="s", content="hist-body")],
+        )
+        post = Post(id="p", title="t", revisions=[], children=[child])
+        assert list(post.iter_content()) == ["hist-body"]
+
+    def test_subject_fallback_when_no_content_or_history(self):
+        """Live wire shape: followups often carry only a subject line."""
+        reply = Child(id="r1", type="feedback", subject="nested reply")
+        child = Child(id="c1", type="followup", subject="hey", children=[reply])
+        post = Post(id="p", title="t", children=[child])
+        assert list(post.iter_content()) == ["hey", "nested reply"]
+
+    def test_deep_chain_no_recursion_error(self):
+        node = None
+        for i in range(200):
+            node = self._child(f"c{i}", f"body-{i}", [node] if node else [])
+        assert node is not None
+        post = Post(
+            id="p",
+            title="t",
+            revisions=[PostRevision(revision=1, subject="s", content="root")],
+            children=[node],
+        )
+        bodies = list(post.iter_content())
+        assert len(bodies) == 201
+        assert bodies[0] == "root"
+        # Construction nests newest on top: c199 wraps c198 ... wraps c0.
+        assert bodies[1] == "body-199"
+        assert bodies[-1] == "body-0"

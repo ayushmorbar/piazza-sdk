@@ -29,6 +29,7 @@ from piazza_sdk.config import PiazzaConfig, SessionConfig
 from piazza_sdk.exceptions import NotFoundError
 from piazza_sdk.models.enums import UserRole
 from piazza_sdk.models.user import EmailPrefEntry
+from piazza_sdk.utils.normalization import extract_urls
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -606,3 +607,36 @@ async def test_live_network_info_roles_matrix():
         resp = await session.client.get(url)
         assert resp.status_code == 200, f"resources_url returned {resp.status_code}: {url}"
         logger.info("✓ resources_url live 200: %s", url)
+
+
+# ── Phase 3 LIVE verification: iter_content + extract_urls ─────────────
+
+
+@live
+@requires_instructor_creds
+@pytest.mark.asyncio
+async def test_live_post_iter_content():
+    """Live verify: Post.iter_content walks a real post tree; extract_urls scans."""
+    config = PiazzaConfig(course_id=COURSE_ID)
+    async with SessionStateManager(config) as session:
+        await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        network = Network(
+            RPC(session=session, base_url=config.base_url, network_id=COURSE_ID), COURSE_ID
+        )
+
+        feed = await network.get_feed(limit=5)
+        assert feed.feed
+        post = await network.get_post(feed.feed[0].id)
+
+        bodies = list(post.iter_content())
+        assert bodies, "iter_content should yield at least one revision body"
+        logger.info(
+            "✓ iter_content yielded %d bodies from post %s (children=%d)",
+            len(bodies),
+            post.id,
+            len(post.children),
+        )
+        assert any(b.strip() for b in bodies), "at least one body should be non-blank"
+
+        urls = extract_urls("\n".join(bodies))
+        logger.info("✓ extract_urls found %d links: %s", len(urls), urls[:5])

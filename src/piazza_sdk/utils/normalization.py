@@ -176,3 +176,46 @@ def normalize_content(content: str, content_type: str = "auto") -> str:
     if content_type == "markdown":
         return normalize_markdown(content)
     return normalize_whitespace(content)
+
+
+# URL extraction (lightweight xurls-equivalent): http/https links only,
+# terminated by whitespace or common delimiters. Trailing punctuation
+# that is almost certainly sentence punctuation is stripped.
+_URL_RE = re.compile(r"https?://[^\s<>\"')\]]+", re.IGNORECASE)
+_URL_TRAILING_PUNCT = ".,;:!?"
+
+
+def extract_urls(text: str, *, dedupe: bool = True) -> list[str]:
+    """Extract HTTP/HTTPS URLs from arbitrary text or HTML.
+
+    Order-preserving regex extraction mirroring the reference client's
+    ``xurls`` usage: scans post bodies for every absolute web link.
+    Trailing sentence punctuation (``.,;:!?``) is stripped so links at
+    the end of a sentence are not mangled.
+
+    Args:
+        text: Raw text or HTML to scan.
+        dedupe: Collapse repeated URLs while preserving first-seen order.
+
+    Returns:
+        Extracted URLs in order of appearance.
+
+    Example:
+        ```python
+        # Example for extract_urls
+        res = await extract_urls()
+        ```
+    """
+    if not text:
+        return []
+    seen: set[str] = set()
+    urls: list[str] = []
+    for raw in _URL_RE.findall(text):
+        url = raw.rstrip(_URL_TRAILING_PUNCT)
+        if not url:
+            continue
+        if dedupe and url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls

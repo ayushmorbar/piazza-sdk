@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from piazza_sdk.utils.normalization import (
+    extract_urls,
     html_to_markdown,
     normalize_content,
     normalize_markdown,
@@ -217,3 +218,39 @@ class TestNormalizeMarkdown:
         input_md = "* Item one\n##Section\n+ Item two"
         result = normalize_markdown(input_md)
         assert result == "- Item one\n## Section\n- Item two"
+
+
+class TestExtractUrls:
+    """Tests for xurls-equivalent URL extraction."""
+
+    def test_empty_and_no_match(self):
+        assert extract_urls("") == []
+        assert extract_urls("no links here at all") == []
+
+    def test_plain_text_single(self):
+        assert extract_urls("see https://example.com/x for info") == ["https://example.com/x"]
+
+    def test_order_preserved(self):
+        text = "a http://one.test b https://two.test c"
+        assert extract_urls(text) == ["http://one.test", "https://two.test"]
+
+    def test_dedupe_preserves_first_position(self):
+        text = "https://a.test then https://b.test again https://a.test"
+        assert extract_urls(text) == ["https://a.test", "https://b.test"]
+        assert extract_urls(text, dedupe=False) == [
+            "https://a.test",
+            "https://b.test",
+            "https://a.test",
+        ]
+
+    def test_trailing_sentence_punctuation_stripped(self):
+        assert extract_urls("visit https://x.test.") == ["https://x.test"]
+        assert extract_urls("see (https://y.test), ok?") == ["https://y.test"]
+
+    def test_html_anchor_content_scanned(self):
+        html = '<a href="https://fn.lc/duck">Duck</a>'
+        assert extract_urls(html) == ["https://fn.lc/duck"]
+
+    def test_query_strings_survive(self):
+        url = "https://e.test/p?a=1&b=2"
+        assert extract_urls(f"link {url} end") == [url]

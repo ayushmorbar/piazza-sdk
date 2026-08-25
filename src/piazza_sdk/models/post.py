@@ -6,6 +6,7 @@ and change log entries.
 
 from __future__ import annotations
 
+from collections.abc import Iterator  # noqa: TC003
 from datetime import datetime  # noqa: TC003
 from typing import Any, Literal
 
@@ -608,6 +609,40 @@ class Post(BaseModel):
             ```
         """
         return bool(self.raw.get("is_tag_good"))
+
+    def iter_content(self) -> Iterator[str]:
+        """Yield every revision body across this post and its whole child tree.
+
+        Depth-first walk (iterative stack — safe for arbitrarily deep
+        threads) mirroring the reference client's ``allChildrenPosts``:
+        yields each non-empty revision body from this post, then from
+        every follow-up/answer/reply descendant in document order.
+
+        Root posts carry bodies in their revision history, while child
+        elements expose their text via the flat ``content`` field or,
+        for short follow-ups, the ``subject`` line — the walk falls
+        back through both when a child has no history entries.
+
+        Yields:
+            Revision content strings (HTML), skipping empty revisions.
+
+        Example:
+            ```python
+            # Example for iter_content
+            res = await iter_content()
+            ```
+        """
+        stack: list[Post | Child] = [self]
+        while stack:
+            node = stack.pop()
+            bodies = [revision.content for revision in node.revisions if revision.content]
+            if not bodies and isinstance(node, Child):
+                body = node.content or node.subject
+                if body:
+                    bodies = [body]
+            yield from bodies
+            if node.children:
+                stack.extend(reversed(node.children))
 
     def normalized(self) -> Post:
         """Return a new Post with HTML content normalized to Markdown.

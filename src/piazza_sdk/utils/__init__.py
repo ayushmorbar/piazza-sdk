@@ -11,6 +11,7 @@ from piazza_sdk.utils.image import (
     normalize_image_url,
 )
 from piazza_sdk.utils.normalization import (
+    extract_urls,
     html_to_markdown,
     normalize_content,
     normalize_markdown,
@@ -21,6 +22,7 @@ from piazza_sdk.utils.normalization import (
 __all__ = [
     "ActivityClassifier",
     "detect_image_type",
+    "extract_urls",
     "get_mime_type",
     "html_to_markdown",
     "is_image_url",

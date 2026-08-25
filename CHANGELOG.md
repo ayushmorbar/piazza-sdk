@@ -11,6 +11,20 @@ Reference-client parity wave: features ported from `d4l3k/piazza-api` (Go)
 and `hfaran/Piazza-API` (Python), each verified against the live Piazza API.
 
 ### Added — (2026-08)
+- **NotAuthenticatedError + pre-login guard** (`88d3d40`):
+  New `NotAuthenticatedError` exception raised when `SessionStateManager.client`
+  is accessed before login completes. Replaces the former `SessionClosedError`
+  for the `UNAUTHENTICATED` state; `SessionClosedError` is now reserved for
+  post-close access only. Guard prevents cryptic httpx "No connection" errors
+  at call time.
+- **Polymorphic cid** (`fe8938c`): `_coerce_cid()` accepts `str | int | Post`
+  and is wired into all four domain content functions that take a thread ID
+  (`resolve_post`, `unresolve_post`, `add_endorsement`, `add_tag`). Booleans
+  are explicitly rejected with `TypeError`.
+- **is_ta enrichment in get_user_classes** (`7034b42`):
+  `get_user_classes()` now enriches each class dict with an `is_ta` boolean
+  derived from the user's `prof_hash` in `user.status`. Enrichment is
+  silently skipped on API failure; returns no classes when profile unavailable.
 - **Interactive prompt login** (`8c7bf44`): `login()` now accepts
   `email=None`/`password=None` and prompts on the terminal (`input`,
   `getpass`) — hfaran-client CLI parity for REPLs and scripts.

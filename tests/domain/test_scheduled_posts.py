@@ -8,7 +8,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from piazza_sdk.domain.posts import _extract_draft_id, _to_epoch_ms, create_post, schedule_post
+from piazza_sdk.domain.posts import (
+    _extract_draft_id,
+    _to_epoch_ms,
+    add_followup,
+    create_post,
+    schedule_post,
+)
 from piazza_sdk.exceptions import ContentError, ValidationError
 
 
@@ -182,3 +188,38 @@ class TestCreatePostPrivate:
         rpc = self._rpc()
         await create_post(rpc, title="t", content="c")
         assert "config" not in rpc.content_create.await_args.kwargs
+
+
+# ---------------------------------------------------------------------------
+# Instructor follow-up (config.ionly)
+# ---------------------------------------------------------------------------
+
+
+class TestInstructorFollowup:
+    """add_followup(instructor=True) injects config.ionly with editor marker."""
+
+    @staticmethod
+    def _rpc() -> MagicMock:
+        rpc = MagicMock()
+        rpc.content_create = AsyncMock(return_value={"id": "fu_1"})
+        return rpc
+
+    async def test_ionly_true_with_editor_marker(self):
+        rpc = self._rpc()
+        await add_followup(rpc, post_id="p1", content="note", instructor=True)
+        kwargs = rpc.content_create.await_args.kwargs
+        assert kwargs["type"] == "followup"
+        assert kwargs["config"] == {"editor": "rte", "ionly": True}
+
+    async def test_no_config_when_not_instructor(self):
+        rpc = self._rpc()
+        await add_followup(rpc, post_id="p1", content="hi")
+        assert "config" not in rpc.content_create.await_args.kwargs
+
+    async def test_caller_config_wins_over_defaults(self):
+        rpc = self._rpc()
+        await add_followup(
+            rpc, post_id="p1", content="x", instructor=True, config={"editor": "plain"}
+        )
+        cfg = rpc.content_create.await_args.kwargs["config"]
+        assert cfg == {"editor": "plain", "ionly": True}

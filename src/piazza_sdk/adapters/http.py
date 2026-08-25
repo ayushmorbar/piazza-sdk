@@ -400,15 +400,31 @@ class RPC:
         except Exception as exc:
             raise error_cls(f"{error_msg}: {exc}") from exc
 
-    async def content_get(self, post_id: str) -> dict[str, Any]:
+    async def content_get(
+        self, post_id: str, *, student_view: bool | None = None
+    ) -> dict[str, Any]:
         """Get full content for a post.
+
+        Args:
+            post_id: The CID of the post to fetch.
+            student_view: When ``True``, sends ``student_view: true`` so
+                the response is limited to student-visible data (useful
+                for instructor accounts that need the student
+                perspective; hfaran #58 contract). Omitted when ``None``.
+
+        Returns:
+            Raw post dictionary.
+
         Example:
             ```python
             # Example for content_get
             res = await content_get(post_id='...')
             ```
         """
-        payload = {"method": "content.get", "params": {"nid": self._nid, "cid": post_id}}
+        params: dict[str, Any] = {"nid": self._nid, "cid": post_id}
+        if student_view is not None:
+            params["student_view"] = student_view
+        payload = {"method": "content.get", "params": params}
         return await self._safe_call(
             "/logic/api",
             payload,

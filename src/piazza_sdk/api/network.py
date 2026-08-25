@@ -292,11 +292,14 @@ class Network:
 
     # ── Post operations ───────────────────────────────────────────────
 
-    async def get_post(self, post_id: str) -> Post:
+    async def get_post(self, post_id: str, *, student_view: bool = False) -> Post:
         """Get a full post by ID.
 
         Args:
             post_id: The post's unique identifier.
+            student_view: Fetch the student-visible view of the post
+                (useful from instructor accounts to see exactly what
+                students see).
 
         Returns:
             Full Post model with all data.
@@ -315,7 +318,7 @@ class Network:
             raise ValidationError("post_id must be non-empty")
         await self._ensure_session()
         try:
-            raw = await self._rpc.content_get(post_id)
+            raw = await self._rpc.content_get(post_id, student_view=True if student_view else None)
             if not raw:
                 raise NotFoundError(f"Post not found: {post_id}")
             return Post(

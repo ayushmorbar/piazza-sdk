@@ -442,6 +442,25 @@ class TestRPCContentGet:
             await rpc.content_get("post123")
         assert exc_info.value.status_code == 500
 
+    async def test_student_view_sent_when_true(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"id": "p"})))
+        await rpc.content_get("p1", student_view=True)
+        body = rpc._session.client.request.await_args.kwargs["json"]
+        assert body["params"]["student_view"] is True
+        assert body["params"]["cid"] == "p1"
+
+    async def test_student_view_false_sent_explicitly(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"id": "p"})))
+        await rpc.content_get("p1", student_view=False)
+        body = rpc._session.client.request.await_args.kwargs["json"]
+        assert body["params"]["student_view"] is False
+
+    async def test_student_view_omitted_when_none(self):
+        rpc = _make_rpc(_make_session(_mock_client(200, {"id": "p"})))
+        await rpc.content_get("p1")
+        body = rpc._session.client.request.await_args.kwargs["json"]
+        assert "student_view" not in body["params"]
+
 
 class TestRPCFeed:
     async def test_get_my_feed(self):

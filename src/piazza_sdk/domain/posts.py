@@ -165,6 +165,7 @@ async def add_followup(  # noqa: PLR0913
     content: str,
     anonymous: bool = False,
     options: PublishingOptions | None = None,
+    instructor: bool = False,
     **kwargs: Any,
 ) -> PostCreatedResponse:
     """Add a follow-up to an existing post.
@@ -176,6 +177,9 @@ async def add_followup(  # noqa: PLR0913
         content: Followup content.
         anonymous: Whether to post anonymously.
         options: Publishing options.
+        instructor: Post as an instructor-only follow-up by injecting
+            ``config.ionly = True`` with the rich-text editor marker.
+            Caller-supplied ``config`` keys win.
         **kwargs: Additional parameters.
 
     Returns:
@@ -193,6 +197,12 @@ async def add_followup(  # noqa: PLR0913
     if not content or not content.strip():
         raise ValidationError("content must be non-empty")
     extra = dict(kwargs)
+    if instructor:
+        caller_config = extra.pop("config", None)
+        merged: dict[str, Any] = {"editor": "rte", "ionly": True}
+        if isinstance(caller_config, dict):
+            merged.update(caller_config)
+        extra["config"] = merged
     if options is not None:
         extra.update(options.to_kwargs())
     anon_str = "stud" if anonymous else "no"

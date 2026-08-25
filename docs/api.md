@@ -186,6 +186,65 @@ await network.resolve_post(post_id="abc123")
 # Manage tags
 await network.add_tag(post_id="abc123", tag="important")
 await network.remove_tag(post_id="abc123", tag="urgent")
+```
+
+### Scheduling & Private Posts
+
+```python
+from datetime import datetime, UTC
+
+# Queue a question or note for future publishing.
+# Two-step wire flow: network.save_draft -> content.create(draftId).
+conf = await network.schedule_post(
+    title="HW2 released",
+    content="<p>Due next Friday.</p>",
+    at=datetime(2030, 5, 1, tzinfo=UTC),  # datetime or unix milliseconds
+    folders=["hw1"],                       # folder must already exist
+)
+print(conf.draft_id)     # handle Piazza holds until publish time
+print(conf.scheduled)    # backend confirmation flag
+
+# Instructor-only post (config.feed_groups = "instr_{nid},{uid}")
+await network.create_post(
+    title="Staff notes",
+    content="<p>Internal.</p>",
+    folders=["logistics"],
+    private_to_staff=True,          # resolves your UID automatically
+    # author_uid="mqsg...",         # optional: skip the profile round-trip
+)
+
+# Instructor-only follow-up (config.ionly)
+await network.create_followup("abc123", "Staff note", instructor=True)
+
+# Student-perspective read from a staff account
+student_view = await network.get_post("abc123", student_view=True)
+```
+
+### Email Preferences
+
+```python
+# Global map keyed by network ID (+ non-course keys like "career")
+prefs = await piazza.get_email_preferences()
+prefs["some_nid"].new  # "instantly" | "daily" | "no-emails" | ...
+
+# Bulk opt-out across every enrolled course
+await piazza.opt_out_of_emails(exclude_nids=["keep_this_nid"])
+
+# Partial update of a single course; other flags preserved losslessly
+await piazza.set_email_notification(nid, new="no-emails")
+```
+
+### Network Info & Capabilities
+
+```python
+info = await network.info()      # parsed user.status entry (cached)
+info.can("instructor", "new_post")  # pre-flight capability check (UserRole enum or str)
+info.resources_url               # https://piazza.com/{ext}/{term}/{num}/home
+
+# Whole-discussion flattening + link extraction
+for body in post.iter_content():
+    urls = extract_urls(body)
+```
 
 # Pin/lock a post
 pinned = await network.pin_post(post_id="abc123")

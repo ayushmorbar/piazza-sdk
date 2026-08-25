@@ -1026,6 +1026,11 @@ When code and this table disagree, trust the table and file a bug.
 | **Resources URL** | `https://piazza.com/{school_ext}/{term-lowercase-nospace}/{short_number}/home` responds HTTP 200 when slugs are present on the network entry. |
 | **Child payloads** | Children in `content.get` carry **no `history`** and usually no flat `content`; follow-up text lives in `subject`. Tree walks fall back history → content → subject. |
 | **Network-scoped params** | `content.bookmark/unbookmark/mark_favorite/mark_unfavorite/view/cancel_edit/remove_feedback/del_item/get_users` accept (and bookmark round-trips with) normalized `nid` + `aid` params; verified via live bookmark→read-back→unbookmark cycle. |
+| **Login CSRF** | `GET /main/csrf_token` returns a JS assignment (`window.CSRF_TOKEN = "...";`) usable directly as the login token; the login-page `<meta>` scrape remains a working fallback. Failed logins return HTTP **200** with an inline `var ERROR_MSG = "...";` assignment carrying the server's reason (e.g. "Email or password incorrect"). |
+| **Scheduled posts** | Two-step flow, both steps live-verified: `network.save_draft` (nested `draft{content,folders,btn{post_type_note,post_type_question,schedule_later,schedule_later_time},txt{post_summary}}`) returns the draft ID as a **bare-string** result — `_safe_call`-style dict coercion destroys it. `content.create` then takes `draftId` + `config.schedule_later/schedule_later_time` and confirms `{"scheduled": true}` with **no post ID** until publish time. Polls cannot be scheduled. Flat draft fields fail with "Missing parameter: draft"; creating without a valid `draftId` fails with "Save as draft first". |
+| **Private posts** | Instructor-only visibility via `config.feed_groups = "instr_{nid},{user_id}"`; verified by create → read-back → delete. Requires an existing folder like any post. |
+| **Instructor follow-ups** | Followups accept `config: {"editor": "rte", "ionly": true}` for staff-only replies; `ionly` observed verbatim on read-back. |
+| **student_view** | `content.get` accepts `student_view: true` to render the student-visible view of a post from a staff account. |
 
 
 ---

@@ -13,9 +13,14 @@
 - **Async/await** throughout with `httpx`
 - **Pydantic v2** models with dot-notation access
 - **Type hints** and PEP 561 `py.typed` marker
-- **Feed operations** — get, filter (unread, following, folder), search
-- **Post lifecycle** — create, read, update, delete, follow-ups, answers, replies
-- **User management** — profiles, classes, permissions
+- **Feed operations** - get, filter (unread, following, folder), search
+- **Post lifecycle** - create, read, update, delete, follow-ups, answers, replies
+- **Scheduled posts** - queue questions/notes for future publishing
+- **Private posts** - instructor-only visibility via `feed_groups`
+- **Instructor-only follow-ups** and student-perspective (`student_view`) reads
+- **Global email preferences** - per-course notification control + bulk opt-out
+- **Role permission matrix** - pre-flight capability checks from `user.status`
+- **User management** - profiles, classes, permissions
 - **Rate limiting** with automatic retry and exponential backoff
 - **Comprehensive exception hierarchy** for fine-grained error handling
 
@@ -59,7 +64,7 @@ if __name__ == "__main__":
 
 ## Acknowledgements
 
-Piazza SDK is deeply grateful to the open-source community. Special thanks to [HfPiazza](https://github.com/hfaran/piazza-api) for earlier inspirations in navigating the complex Piazza undocumented API layer.
+Piazza SDK is deeply grateful to the open-source community. Special thanks to [hfaran/piazza-api](https://github.com/hfaran/Piazza-API) for earlier inspirations in navigating the complex Piazza undocumented API layer.
 
 ## API
 
@@ -67,10 +72,10 @@ Piazza SDK is deeply grateful to the open-source community. Special thanks to [H
 
 | Class                | Description                                  |
 | -------------------- | -------------------------------------------- |
-| `Piazza`             | Entry point — user profile, classes          |
-| `Network`            | Per-class operations — feed, posts, users    |
+| `Piazza`             | Entry point - user profile, classes, email preferences |
+| `Network`            | Per-class operations - feed, posts, users, scheduling |
 | `SessionConfig`      | Configuration (course ID, timeouts, retries) |
-| `SessionStateManager`| Async context manager — session lifecycle    |
+| `SessionStateManager`| Async context manager - session lifecycle    |
 
 ### Models
 
@@ -88,6 +93,49 @@ post.tags        # list[str]
 # On-demand HTML-to-Markdown normalization
 normalized = post.normalized()
 print(normalized.subject)  # Clean Markdown text
+```
+
+### Scheduling & Private Posts
+
+```python
+from datetime import datetime, UTC
+
+# Queue a post for future publishing (returns ScheduledPostConfirmation)
+conf = await network.schedule_post(
+    title="HW2 released",
+    content="<p>Due next Friday.</p>",
+    at=datetime(2030, 5, 1, tzinfo=UTC),
+    folders=["hw1"],
+)
+print(conf.draft_id, conf.scheduled)
+
+# Instructor-only post (config.feed_groups)
+await network.create_post(
+    title="Staff notes",
+    content="<p>Internal.</p>",
+    folders=["logistics"],
+    private_to_staff=True,
+)
+
+# Instructor-only follow-up + student-perspective read
+await network.create_followup(post_cid, "Staff note", instructor=True)
+student_view = await network.get_post(post_cid, student_view=True)
+```
+
+### Email Preferences & Capabilities
+
+```python
+# Bulk opt-out across every enrolled course
+prefs = await piazza.opt_out_of_emails(exclude_nids=["keep_this_nid"])
+
+# Flip a single course; unknown flags preserved via lossless merge
+await piazza.set_email_notification(nid, new="no-emails")
+
+# Pre-flight capability checks from the role matrix
+info = await network.info()
+if await network.can("instructor", "new_post"):
+    ...
+print(info.resources_url)  # https://piazza.com/{school_ext}/{term}/{num}/home
 ```
 
 ### Filters

@@ -62,18 +62,27 @@ tests/
   conftest.py                  # Shared fixtures & env loader
   test_config.py               # PiazzaConfig and SessionConfig tests
   test_exceptions.py           # Exception hierarchy tests
-  test_models.py               # Pydantic models, filters, enums, builders
-  test_adapters_auth.py        # CookieJar, token storage, encryption
-  test_adapters_session.py     # SessionStateManager lifecycle, login, refresh
-  test_adapters_http.py        # RPC adapter tests (transport, retries, wrappers)
-  test_domain.py               # Pure domain module tests
-  test_api_piazza.py           # Piazza client tests (caching, profile, classes)
-  test_api_network.py          # Network facade tests (feed, posts, users, search)
-  test_utils_normalization.py  # Text and HTML normalization tests
-  test_utils_classification.py # ActivityClassifier tests
-  test_utils_image.py          # Image processing utility tests
   test_validation.py           # Input validation edge case tests
   test_live.py                 # LIVE tests (-m live; instructor, student, cross-role)
+  models/test_models.py        # Pydantic models, filters, enums, builders
+  adapters/                    # Adapter-layer unit tests
+    test_auth.py               # CookieJar, token storage, encryption
+    test_session.py            # SessionStateManager lifecycle, login, CSRF, refresh
+    test_http.py               # RPC adapter (transport, retries, payload shapes)
+  domain/                      # Domain-layer unit tests
+    test_email_prefs.py        # Global email preferences (user.update)
+    test_network.py            # Network settings domain ops
+    test_network_info.py       # Network info parsing + role permission matrix
+    test_scheduled_posts.py    # Scheduled posts, private posts, ionly followups
+    test_posts.py / test_search.py / test_statistics.py
+    test_generated_*.py        # Auto-generated happy-path suites per domain module
+  api/                         # Facade-layer unit tests
+    test_piazza.py             # Piazza client (caching, profile, classes, prefs)
+    test_network_*.py          # Network facade tests (feed, posts, users, settings...)
+  utils/                       # Utility tests
+    test_normalization.py      # Text/HTML normalization + extract_urls
+    test_classification.py     # ActivityClassifier tests
+    test_image.py              # Image processing utility tests
 ```
 
 ## Code Style

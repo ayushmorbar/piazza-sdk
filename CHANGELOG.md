@@ -7,6 +7,77 @@ and this project adheres to [CalVer](https://calver.org/) (`YYYY.MM.DD`).
 
 ## [Unreleased]
 
+Reference-client parity wave: features ported from `d4l3k/piazza-api` (Go)
+and `hfaran/Piazza-API` (Python), each verified against the live Piazza API.
+
+### Added — (2026-08)
+- **Login hardening** (`892f1ec`):
+  - CSRF token now acquired from the dedicated `GET /main/csrf_token`
+    endpoint (JS-assignment parse), with the legacy login-page `<meta>`
+    scrape kept as automatic fallback.
+  - Failed logins surface the server's inline `var ERROR_MSG` text
+    verbatim in `AuthenticationError` (e.g. "Email or password incorrect").
+- **Scheduled posts** (`dfbf3f3`): two-step wire flow via
+  `network.save_draft` → `content.create(draftId, config.schedule_later*)`.
+  - New `RPC.network_save_draft` (scalar-preserving: the endpoint returns
+    the draft ID as a *bare string*).
+  - New domain `schedule_post()` + `Network.schedule_post()` accepting
+    `datetime` or unix-millisecond targets; polls rejected upstream.
+  - New `ScheduledPostConfirmation` model — live API confirms
+    `{"scheduled": true}` with **no post ID** until publish time.
+- **Private posts to staff** (`7f867bf`):
+  `create_post(private_to_staff=True)` resolves your user ID and injects
+  `config.feed_groups = "instr_{nid},{uid}"`; pass `author_uid=` to skip
+  the profile round-trip. Caller-supplied `config` keys are preserved.
+  - `RPC.network_id` property added (declared by `RPCProtocol` but
+    previously unimplemented on the adapter — caught by live read-back).
+- **Instructor-only follow-ups** (`6970384`):
+  `add_followup(instructor=True)` injects `config.ionly=true` plus the
+  rich-text editor marker; caller `config` keys win over defaults.
+- **student_view reads** (`6970384`):
+  `RPC.content_get(student_view=)` / `Network.get_post(student_view=True)`
+  render the student-visible view from staff accounts; param omitted when
+  unset.
+
+### Added — (2026-08)
+- **Global email preferences** (`d1b35a5`): `user.update` support with
+  lossless raw-dict read-modify-write.
+  - New models: `EmailPrefEntry` (`auto_follow` is bool-or-string on the
+    wire); new RPC `user_update`; domain `get_email_preferences`,
+    `set_email_notification`, `opt_out_of_emails(exclude_nids, keep_careers)`;
+    facade equivalents on `Piazza`.
+- **Network info + role permission matrix** (`93457ea`):
+  - New server-fed models `RolePermissions`, `NetworkRoles`,
+    `ClassSections`, `NetworkConfig`; `NetworkInfo` relaxed to
+    `extra="ignore"` and extended with `school_ext`, `short_number`,
+    `anonymity`, `auto_join`, `config`, a `resources_url` property, and a
+    `can(role, action)` pre-flight capability check.
+  - Domain `parse_network_entry` / `get_network_info`;
+    `Network.info()` (cached) + `Network.can()`.
+- **Content utilities** (`621fc7e`):
+  - `Post.iter_content()` — iterative depth-first walk yielding every
+    revision body across the whole child tree; live-corrected fallback
+    chain history → content → subject (children carry no history;
+    follow-ups store text in `subject`).
+  - `utils.extract_urls()` — order-preserving xurls-equivalent extraction.
+
+### Fixed
+- Network-scoped RPC payloads normalized (`7e2f38b`): late-added helpers
+  (`content.bookmark/unbookmark/mark_favorite/mark_unfavorite/view/edit/
+  remove_feedback/del_item/get_users`) now carry `nid` + `aid` like legacy
+  methods; `content.cancel_edit` nid is optional (defaults to instance);
+  parametrized payload-shape test table added.
+- `update_user_preferences` no longer launders typed SDK errors into
+  `UserError` — `status_code`/`retry_after_ms` survive (`7e2f38b`).
+
+### Documented
+- Live-verified wire contracts recorded in `docs/data-dictionary.md`
+  (`336d1d1`, this release): global email prefs map + `career` key,
+  five-role matrix incl. `student.can_post_anonymous_all`, resources URL
+  shape, child payload shapes, scheduled-post flow failure modes ("Missing
+  parameter: draft", "Save as draft first"), private-post `feed_groups`
+  contract, instructor follow-up `ionly`, and `student_view`.
+
 ## [2026.08.25.1] - 2026-08-25
 
 ### Added

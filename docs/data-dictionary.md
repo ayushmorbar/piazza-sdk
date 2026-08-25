@@ -767,6 +767,7 @@ All exceptions inherit from `PiazzaSDKError`. Defined in `src/piazza_sdk/excepti
 Exception
   └── PiazzaSDKError              (base — message, status_code, response_body)
         ├── AuthenticationError    — login/session failures
+        ├── NotAuthenticatedError — client used before .login() (PiazzaSDKError)
         ├── RateLimitError         — HTTP 429; additional: retry_after_ms: int | None
         ├── NotFoundError          — HTTP 404 / resource not found
         ├── PermissionError        — HTTP 403

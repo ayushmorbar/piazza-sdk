@@ -21,9 +21,12 @@
 - **Global email preferences** - per-course notification control + bulk opt-out
 - **Role permission matrix** - pre-flight capability checks from `user.status`
 - **Flexible auth** - interactive prompt login, cookie hand-off, demo (share-link) login
-- **User management** - profiles, classes, permissions
+- **User management** - profiles, classes, permissions, `is_ta` enrichment
+- **Polymorphic `cid`** - pass `str`, `int`, or `Post` to post operations
+- **Announcement & bypass-email posts** - `announcement` + `bypass_email` flags
+- **RPC escape hatch** - `RPC.invoke()` for arbitrary API methods
 - **Rate limiting** with automatic retry and exponential backoff
-- **Comprehensive exception hierarchy** for fine-grained error handling
+- **Comprehensive exception hierarchy** including `NotAuthenticatedError`
 
 ## Installation
 

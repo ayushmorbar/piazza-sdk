@@ -27,6 +27,7 @@ from piazza_sdk.api.network import Network
 from piazza_sdk.api.piazza import Piazza
 from piazza_sdk.config import PiazzaConfig, SessionConfig
 from piazza_sdk.exceptions import NotFoundError
+from piazza_sdk.models.user import EmailPrefEntry
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -501,3 +502,57 @@ async def test_live_no_throttle_performance():
         elapsed = time.monotonic() - start
         assert elapsed < 2.0, f"Unthrottled requests too slow (elapsed {elapsed:.2f}s >= 2.0s)"
         logger.info("✓ Unthrottled 3 rapid requests were fast (elapsed: %.2fs)", elapsed)
+
+
+# ── Phase 1 LIVE verification: global email preferences ────────────────
+
+
+@live
+@requires_instructor_creds
+@pytest.mark.asyncio
+async def test_live_email_preferences_roundtrip():
+    """Live verify: user.status email_prefs read + user.update flip/revert.
+
+    Flips one course to ``no-emails``, asserts the change is visible on a
+    fresh read, then reverts to the original value and asserts the revert.
+    Skips the flip when the original ``new`` value is unknown so cleanup
+    stays exact.
+    """
+    config = PiazzaConfig(course_id=COURSE_ID)
+    async with SessionStateManager(config) as session:
+        await session.login(email=INSTRUCTOR_EMAIL, password=INSTRUCTOR_PASSWORD)
+        piazza = Piazza(session)
+
+        prefs = await piazza.get_email_preferences()
+        assert isinstance(prefs, dict), "email_prefs should be a mapping"
+        assert prefs, "email_prefs should be present"
+        logger.info("✓ email_prefs keys: %s", sorted(prefs))
+
+        # Typed entries parse cleanly; career key tolerated if present.
+        for key, entry in prefs.items():
+            assert isinstance(entry, EmailPrefEntry), f"entry {key} not typed"
+
+        course_keys = [k for k in prefs if k != "career"]
+        nid = COURSE_ID if COURSE_ID in prefs else course_keys[0]
+        original_new = prefs[nid].new
+        logger.info("✓ target=%s original new=%r", nid, original_new)
+
+        # No-op RMW write must succeed and preserve the value.
+        updated = await piazza.set_email_notification(nid, new=original_new or "instantly")
+        assert updated["new"] == (original_new or "instantly")
+
+        if original_new is None:
+            logger.info("! original 'new' missing; skipped destructive flip")
+            return
+
+        # Real flip -> visible on fresh read.
+        await piazza.set_email_notification(nid, new="no-emails")
+        after = await piazza.get_email_preferences()
+        assert after[nid].new == "no-emails", "flip not visible on read-back"
+        logger.info("✓ flip to no-emails verified on live read-back")
+
+        # Revert -> visible on fresh read.
+        await piazza.set_email_notification(nid, new=original_new)
+        restored = await piazza.get_email_preferences()
+        assert restored[nid].new == original_new, "revert not visible on read-back"
+        logger.info("✓ revert to %r verified — state restored", original_new)

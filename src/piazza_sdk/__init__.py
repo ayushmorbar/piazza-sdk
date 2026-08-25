@@ -69,7 +69,7 @@ from piazza_sdk.models.post import (
     PostRevision,
     PublishingOptions,
 )
-from piazza_sdk.models.user import User, UserPreferences
+from piazza_sdk.models.user import EmailPrefEntry, User, UserPreferences
 
 PiazzaSession = SessionStateManager
 
@@ -115,6 +115,7 @@ __all__ = [
     # Models
     "AssetUploadResponse",
     "ChangeLogEntry",
+    "EmailPrefEntry",
     "Endorsement",
     "Feed",
     "FeedFilter",

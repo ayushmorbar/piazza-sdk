@@ -13,8 +13,11 @@ from piazza_sdk.api.rpc import RPC
 from piazza_sdk.exceptions import PiazzaSDKError
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from piazza_sdk.auth import SessionStateManager
     from piazza_sdk.models.enums import UserStatKey
+    from piazza_sdk.models.user import EmailPrefEntry
 
 
 class Piazza:
@@ -245,6 +248,107 @@ class Piazza:
         from piazza_sdk.domain.users import unset_user_setting  # noqa: PLC0415
 
         return await unset_user_setting(self._get_user_rpc(), stat=stat)
+
+    async def get_email_preferences(self) -> dict[str, EmailPrefEntry]:
+        """Read the current user's global email notification preferences.
+
+        Uses ``user.status`` (``config.email_prefs``) and returns a typed
+        view keyed by network ID. Automatically restores the session if
+        expired.
+
+        Returns:
+            Mapping of preference key to :class:`EmailPrefEntry`.
+
+        Example:
+            ```python
+            # Example for get_email_preferences
+            res = await get_email_preferences()
+            ```
+        """
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.users import get_email_preferences  # noqa: PLC0415
+
+        return await get_email_preferences(self._get_user_rpc())
+
+    async def set_email_notification(  # noqa: PLR0913 - explicit optional flag surface
+        self,
+        nid: str,
+        *,
+        new: str | None = None,
+        updates: str | None = None,
+        no_events: bool | None = None,
+        auto_follow: str | None = None,
+        throttle: int | None = None,
+    ) -> dict[str, Any]:
+        """Partially update one course's email notification settings.
+
+        Read-modify-write against the full preference map; all other
+        courses are preserved. Automatically restores the session if
+        expired.
+
+        Args:
+            nid: Network ID of the course whose settings change.
+            new: New-post notification mode (e.g. ``"instantly"``,
+                ``"daily"``, ``"no-emails"``).
+            updates: Update notification mode.
+            no_events: Whether event notifications are suppressed.
+            auto_follow: Auto-follow setting.
+            throttle: Email throttling value.
+
+        Returns:
+            The updated raw entry for *nid*.
+
+        Example:
+            ```python
+            # Example for set_email_notification
+            res = await set_email_notification(nid='...')
+            ```
+        """
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.users import set_email_notification  # noqa: PLC0415
+
+        return await set_email_notification(
+            self._get_user_rpc(),
+            nid,
+            new=new,
+            updates=updates,
+            no_events=no_events,
+            auto_follow=auto_follow,
+            throttle=throttle,
+        )
+
+    async def opt_out_of_emails(
+        self, *, exclude_nids: Sequence[str] = (), keep_careers: bool = False
+    ) -> dict[str, Any]:
+        """Disable email notifications for every enrolled course at once.
+
+        Sets ``new: "no-emails"`` on each entry of the global
+        ``email_prefs`` map via ``user.update``. Courses listed in
+        ``exclude_nids`` keep their current mode; the non-course
+        ``career`` entry is dropped unless ``keep_careers=True``.
+
+        Args:
+            exclude_nids: Course IDs to leave untouched.
+            keep_careers: Whether to preserve the ``career`` prefs entry.
+
+        Returns:
+            The final ``email_prefs`` payload that was written.
+
+        Example:
+            ```python
+            # Example for opt_out_of_emails
+            res = await opt_out_of_emails()
+            ```
+        """
+        if self._session.needs_refresh:
+            await self._session.refresh()
+        from piazza_sdk.domain.users import opt_out_of_emails  # noqa: PLC0415
+
+        return await opt_out_of_emails(
+            self._get_user_rpc(), exclude_nids=exclude_nids, keep_careers=keep_careers
+        )
 
     async def page_event(self, type: str, **kwargs: Any) -> bool:
         """Record a page-view event for analytics.

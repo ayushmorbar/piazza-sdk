@@ -135,3 +135,35 @@ class UserPreferences(BaseModel):
     push_new_followup: bool = Field(default=True, description="Push-notify on new follow-ups")
     push_new_answer: bool = Field(default=True, description="Push-notify on new answers")
     show_student_names: bool = Field(default=True, description="Show student names publicly")
+
+
+class EmailPrefEntry(BaseModel):
+    """Per-network email notification settings from ``user.status``.
+
+    Mirrors the wire shape of ``result.config.email_prefs[nid]``. All
+    fields are optional so callers can build *partial* entries for
+    read-modify-write merges; the domain layer serializes with
+    ``exclude_unset`` semantics against the raw payload to avoid
+    wiping unspecified flags.
+
+    Attributes:
+        auto_follow: Auto-follow setting (string or null on the wire).
+        new: Notification mode for new posts
+            (e.g. ``"instantly"``, ``"daily"``, ``"no-emails"``).
+        updates: Notification mode for updates to existing content.
+        no_events: Whether event notifications are suppressed.
+        throttle: Email throttling value.
+    """
+
+    model_config = ConfigDict(slots=True, extra="ignore")  # type: ignore[typeddict-unknown-key]
+
+    auto_follow: str | bool | None = Field(
+        default=None, description="Auto-follow setting (observed as bool or string on the wire)"
+    )
+    new: str | None = Field(
+        default=None,
+        description='Notification mode for new posts ("instantly", "daily", "no-emails", ...)',
+    )
+    updates: str | None = Field(default=None, description="Notification mode for updates")
+    no_events: bool | None = Field(default=None, description="Whether event emails are off")
+    throttle: int | None = Field(default=None, description="Email throttling value")

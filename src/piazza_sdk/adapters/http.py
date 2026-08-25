@@ -1269,6 +1269,34 @@ class RPC:
             "/logic/api", payload, error_cls=UserError, error_msg="Failed to unset user setting"
         )
 
+    async def user_update(self, **kwargs: Any) -> dict[str, Any]:
+        """Update the global user record via ``user.update``.
+
+        This is a *global* (non-network-scoped) endpoint: the payload is
+        forwarded verbatim with no ``nid``/``aid`` injection, matching
+        the reference wire contract ``{"email_prefs": {...}}``.
+
+        Args:
+            **kwargs: Fields of the user record to update (e.g.
+                ``email_prefs`` mapping network ID -> preference dict).
+
+        Returns:
+            Raw API response dictionary.
+
+        Example:
+            ```python
+            # Example for user_update
+            res = await user_update(**kwargs)
+            ```
+        """
+        blocked = _BLOCKED_KEYS & kwargs.keys()
+        if blocked:
+            raise PiazzaSDKError(f"Reserved keys cannot be overridden: {blocked}")
+        payload = {"method": "user.update", "params": kwargs}
+        return await self._safe_call(
+            "/logic/api", payload, error_cls=UserError, error_msg="Failed to update user"
+        )
+
     async def company_event_get_my_events_info(self) -> dict[str, Any]:
         payload = {"method": "company_event.get_my_events_info", "params": {}}
         return await self._safe_call(

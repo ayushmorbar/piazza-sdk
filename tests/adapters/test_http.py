@@ -487,6 +487,25 @@ class TestRPCContentDelete:
         assert result == {"deleted": True}
 
 
+class TestRPCUserUpdate:
+    async def test_user_update_forwards_params_verbatim(self):
+        """user.update is global: payload forwarded with no nid/aid injection."""
+        rpc = _make_rpc(_make_session(_mock_client(200, {"ok": True})))
+        prefs = {"nid1": {"new": "no-emails"}}
+        result = await rpc.user_update(email_prefs=prefs)
+        assert result == {"ok": True}
+        call = rpc._session.client.request.await_args
+        body = call.kwargs["json"]
+        assert body == {"method": "user.update", "params": {"email_prefs": prefs}}
+        assert "aid" not in body["params"]
+        assert "nid" not in body["params"]
+
+    async def test_user_update_blocks_reserved_keys(self):
+        rpc = _make_rpc(_make_session(_mock_client(200)))
+        with pytest.raises(PiazzaSDKError, match="Reserved keys"):
+            await rpc.user_update(method="override")
+
+
 class TestRPCGetUsers:
     async def test_get_users(self):
         rpc = _make_rpc(_make_session(_mock_client(200, {"users": []})))

@@ -8,6 +8,7 @@ import pytest
 
 from piazza_sdk.api.network import Network
 from piazza_sdk.api.piazza import Piazza
+from piazza_sdk.models.user import EmailPrefEntry
 
 
 class TestPiazzaNetworkFactory:
@@ -96,3 +97,45 @@ class TestPiazzaGlobalDelegations:
 
         res = await piazza.sanitize_html(text="<p>dirty</p>")
         assert res == {"html": "<p>clean</p>"}
+
+    @pytest.mark.asyncio
+    async def test_get_email_preferences(self, mock_session):
+        mock_rpc = MagicMock()
+        mock_rpc.user_status = AsyncMock(
+            return_value={"config": {"email_prefs": {"n1": {"new": "instantly"}}}}
+        )
+        piazza = Piazza(mock_session)
+        piazza._user_rpc = mock_rpc
+
+        prefs = await piazza.get_email_preferences()
+        assert isinstance(prefs["n1"], EmailPrefEntry)
+        assert prefs["n1"].new == "instantly"
+
+    @pytest.mark.asyncio
+    async def test_opt_out_of_emails(self, mock_session):
+        mock_rpc = MagicMock()
+        mock_rpc.user_status = AsyncMock(
+            return_value={"config": {"email_prefs": {"n1": {"new": "instantly"}, "career": {}}}}
+        )
+        mock_rpc.user_update = AsyncMock(return_value={})
+        piazza = Piazza(mock_session)
+        piazza._user_rpc = mock_rpc
+
+        result = await piazza.opt_out_of_emails()
+        assert set(result) == {"n1"}
+        assert result["n1"]["new"] == "no-emails"
+        mock_rpc.user_update.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_set_email_notification(self, mock_session):
+        mock_rpc = MagicMock()
+        mock_rpc.user_status = AsyncMock(
+            return_value={"config": {"email_prefs": {"n1": {"new": "instantly", "throttle": 0}}}}
+        )
+        mock_rpc.user_update = AsyncMock(return_value={})
+        piazza = Piazza(mock_session)
+        piazza._user_rpc = mock_rpc
+
+        updated = await piazza.set_email_notification("n1", new="no-emails")
+        assert updated["new"] == "no-emails"
+        assert updated["throttle"] == 0  # preserved by partial merge

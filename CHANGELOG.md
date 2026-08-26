@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [CalVer](https://calver.org/) (`YYYY.MM.DD`).
 
+## [2026.08.26.2] - 2026-08-26
+
+Wire-level payload alignment with hfaran/piazza-api (Python) reference client.
+
+### Changed
+- **resolve_post** / **unresolve_post**: Refactored from fetch+re-submit
+  (`content_get` + `content_update`) to direct `content_mark_resolved`
+  RPC call with `resolved=True`/`resolved=False` (hfaran parity).
+- **add_followup**: Changed `content=content` to `content=""` in payload
+  (hfaran parity — followups carry no body).
+- **create_reply**: Changed `content=content` to `content=""` in payload
+  (hfaran parity — replies carry no body).
+- **mark_duplicate**: Pre-fetch validation — both `duplicate_id` and
+  `master_id` are fetched via `content_get` before calling
+  `content_duplicate`; raises `NotFoundError` if either post is missing.
+
+### Added
+- **update_post**: New domain function for editing post subject/body
+  via `content.update` RPC. Takes `post_id` (polymorphic `Post|str|int`)
+  and `content: str` (new subject/body text).
+
 ## [2026.08.26.1] - 2026-08-26
 
 Reference-client parity wave: features ported from `d4l3k/piazza-api` (Go)

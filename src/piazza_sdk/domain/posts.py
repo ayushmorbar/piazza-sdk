@@ -32,6 +32,7 @@ __all__ = [
     "unfavorite_post",
     "unpin_post",
     "unresolve_post",
+    "update_post",
     "upload_asset",
     "view_post",
 ]
@@ -274,8 +275,12 @@ async def add_followup(  # noqa: PLR0913
         extra.update(options.to_kwargs())
     anon_str = "stud" if anonymous else "no"
     cid = _coerce_cid(post_id)
+    # Piazza's ``content.create`` expects ``subject`` as the follow-up
+    # text; ``content`` must be an empty string — sending the real text
+    # there duplicates it in the wire payload and some live payloads
+    # reject non-empty content (hfaran parity 2026-08).
     raw = await rpc.content_create(
-        type="followup", cid=cid, subject=content, content=content, anonymous=anon_str, **extra
+        type="followup", cid=cid, subject=content, content="", anonymous=anon_str, **extra
     )
     result = raw.get("result", raw)
     return PostCreatedResponse.model_validate(result)
@@ -323,8 +328,10 @@ async def create_reply(  # noqa: PLR0913
         extra.update(options.to_kwargs())
     anon_str = "stud" if anonymous else "no"
     cid = _coerce_cid(post_id)
+    # ``subject`` carries the reply text; ``content`` must be an empty
+    # string (hfaran parity — the real text lives in ``subject`` only).
     raw = await rpc.content_create(
-        type="feedback", cid=cid, subject=content, content=content, anonymous=anon_str, **extra
+        type="feedback", cid=cid, subject=content, content="", anonymous=anon_str, **extra
     )
     result = raw.get("result", raw)
     return PostCreatedResponse.model_validate(result)
@@ -534,12 +541,9 @@ async def resolve_post(
 ) -> bool:
     """Mark a post as resolved.
 
-    Fetches the current post data and re-submits it with
-    ``status="resolved"`` via ``content.update``.  This is the
-    preferred way to change post-level status — the dedicated
-    ``content.mark_resolved`` RPC can return *Invalid content* on
-    some live API payloads and should only be used for follow-up/comment
-    resolution.
+    Uses the ``content.mark_resolved`` RPC directly — the same endpoint
+    hfaran's reference client uses.  This avoids the round-trip of
+    fetching the full post data and re-submitting it via ``content.update``.
 
     Args:
         rpc: RPC client instance.
@@ -577,30 +581,7 @@ async def resolve_post(
     if isinstance(post_id, str) and not post_id.strip():
         raise ValidationError("post_id must be non-empty")
     cid = _coerce_cid(post_id)
-    post_data: dict[str, Any] = {}
-    if hasattr(rpc, "content_get"):
-        # Annotated ``Any``: duck-typed RPCs (mocks, alternate transports) may
-        # return a bare dict instead of a coroutine.
-        res: Any = rpc.content_get(cid)
-        if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
-            post_data = await res
-        elif isinstance(res, dict):
-            post_data = res
-    history_entries = post_data.get("history", [])
-    first_hist = (
-        history_entries[0] if history_entries and isinstance(history_entries[0], dict) else {}
-    )
-    subject = first_hist.get("subject", post_data.get("subject", ""))
-    content = first_hist.get("content", post_data.get("content", ""))
-    folders = post_data.get("folders", ["other"])
-    raw: Any = await rpc.content_update(
-        cid=cid,
-        subject=subject,
-        content=content,
-        folders=folders,
-        anonymous=post_data.get("default_anonymity", "no"),
-        status="resolved",
-    )
+    raw: Any = await rpc.content_mark_resolved(cid, resolved=True)
     if not isinstance(raw, dict):
         return True
     return raw.get("result", "success") in (None, "success")
@@ -611,9 +592,8 @@ async def unresolve_post(
 ) -> bool:
     """Mark a resolved post as active (unresolve).
 
-    This fetches the current post data and re-submits it with
-    ``status="active"`` via ``content.update``.  Mirrors the behaviour
-    of :func:`resolve_post` but sets the status back to ``"active"``.
+    Uses the ``content.mark_resolved`` RPC directly with
+    ``resolved=False`` — mirrors :func:`resolve_post`.
 
     Args:
         rpc: RPC client instance.
@@ -651,28 +631,7 @@ async def unresolve_post(
     if isinstance(post_id, str) and not post_id.strip():
         raise ValidationError("post_id must be non-empty")
     cid = _coerce_cid(post_id)
-    post_data: dict[str, Any] = {}
-    if hasattr(rpc, "content_get"):
-        res: Any = rpc.content_get(cid)
-        if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
-            post_data = await res
-        elif isinstance(res, dict):
-            post_data = res
-    history_entries = post_data.get("history", [])
-    first_hist = (
-        history_entries[0] if history_entries and isinstance(history_entries[0], dict) else {}
-    )
-    subject = first_hist.get("subject", post_data.get("subject", ""))
-    content = first_hist.get("content", post_data.get("content", ""))
-    folders = post_data.get("folders", ["other"])
-    raw: Any = await rpc.content_update(
-        cid=cid,
-        subject=subject,
-        content=content,
-        folders=folders,
-        anonymous=post_data.get("default_anonymity", "no"),
-        status="active",
-    )
+    raw: Any = await rpc.content_mark_resolved(cid, resolved=False)
     if not isinstance(raw, dict):
         return True
     return raw.get("result", "success") in (None, "success")
@@ -1071,6 +1030,54 @@ async def cancel_edit(
     return True
 
 
+async def update_post(
+    rpc: RPC, *, session: SessionStateManager | None = None, post_id: Post | str | int, content: str
+) -> bool:
+    """Update the body content of an existing post.
+
+    Sends only the ``subject`` (post body text) via ``content.update``.
+    This is a lightweight alternative to :func:`edit_post` when you
+    only need to change the text and not the type/folders/anonymity.
+
+    Args:
+        rpc: RPC client instance.
+        session: Optional session manager for automatic refresh.
+        post_id: ID of the post to update. Accepts a :class:`Post`
+            model (extracts ``.id``), an ``int`` (converted to ``str``),
+            or a ``str``.
+        content: The new body text for the post.
+
+    Returns:
+        True if the operation succeeded.
+
+    Raises:
+        ValidationError: If post_id is empty.
+
+    Note:
+        Unlike sibling operations, generic (non-SDK) exceptions propagate
+        unwrapped here.  This is an intentional, tested contract — callers
+        that need uniform wrapping should catch ``Exception`` at the call site.
+
+    Example:
+        ```python
+        from piazza_sdk.api.rpc import RPC
+        from piazza_sdk.domain.posts import update_post
+
+        # Update a post's body text:
+        success = await update_post(
+            rpc, post_id="cl7k3x2f5", content="Updated answer above."
+        )
+        ```
+    """
+    if isinstance(post_id, str) and not post_id.strip():
+        raise ValidationError("post_id must be non-empty")
+    cid = _coerce_cid(post_id)
+    raw: Any = await rpc.content_update(cid=cid, subject=content)
+    if not isinstance(raw, dict):
+        return True
+    return raw.get("result", "success") in (None, "success")
+
+
 async def remove_endorsement(
     rpc: RPC, *, session: SessionStateManager | None = None, post_id: str, type: str = "tag_good"
 ) -> bool:
@@ -1144,6 +1151,10 @@ async def mark_duplicate(
 ) -> bool:
     """Mark a post as a duplicate of another post.
 
+    Pre-fetches both posts to validate they exist before sending
+    the ``content.duplicate`` RPC (hfaran parity).  This avoids
+    silent failures when either post ID is invalid.
+
     Args:
         rpc: RPC client instance.
         session: Optional session manager.
@@ -1154,11 +1165,32 @@ async def mark_duplicate(
     Returns:
         True if successful.
 
+    Raises:
+        NotFoundError: If either post ID does not exist on the server.
+
         Example:
             ```python
             # Example for mark_duplicate
             res = await mark_duplicate()
             ```
     """
+    dup_data: dict[str, Any] = {}
+    if hasattr(rpc, "content_get"):
+        res_dup: Any = rpc.content_get(duplicate_id)
+        if asyncio.iscoroutine(res_dup) or hasattr(res_dup, "__await__"):
+            dup_data = await res_dup
+        elif isinstance(res_dup, dict):
+            dup_data = res_dup
+    master_data: dict[str, Any] = {}
+    if hasattr(rpc, "content_get"):
+        res_master: Any = rpc.content_get(master_id)
+        if asyncio.iscoroutine(res_master) or hasattr(res_master, "__await__"):
+            master_data = await res_master
+        elif isinstance(res_master, dict):
+            master_data = res_master
+    if not dup_data:
+        raise NotFoundError(f"Duplicate post {duplicate_id!r} not found")
+    if not master_data:
+        raise NotFoundError(f"Master post {master_id!r} not found")
     await rpc.content_duplicate(duplicate_id, master_id, message)
     return True

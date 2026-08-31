@@ -25,7 +25,7 @@ idna===3.19
     #   httpx
 pycparser===3.0
     # via cffi
-pydantic===2.13.4
+pydantic===2.13.5
     # via
     #   piazza-sdk
     #   pydantic-settings

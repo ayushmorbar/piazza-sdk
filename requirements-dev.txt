@@ -118,7 +118,7 @@ pytest==9.1.1
     #   pytest-cov
 pytest-asyncio==1.4.0
 pytest-cov==7.1.0
-python-discovery==1.5.3
+python-discovery==1.6.0
     # via virtualenv
 python-dotenv==1.2.3
     # via pydantic-settings

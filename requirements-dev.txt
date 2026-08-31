@@ -156,5 +156,5 @@ typing-inspection==0.4.4
     #   pydantic-settings
 urllib3==2.7.0
     # via requests
-virtualenv==21.7.4
+virtualenv==21.7.6
     # via pre-commit
